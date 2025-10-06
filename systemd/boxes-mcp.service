@@ -1,0 +1,12 @@
+[Unit]
+Description=Boxes MCP (Claude Code)
+After=default.target
+
+[Service]
+Type=simple
+Environment=LIBVIRT_URI=qemu:///system
+ExecStart=%h/projects/virtmcp/node_modules/.bin/node %h/projects/virtmcp/dist/src/index.js
+Restart=on-failure
+
+[Install]
+WantedBy=default.target

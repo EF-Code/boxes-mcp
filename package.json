@@ -1,0 +1,26 @@
+{
+  "name": "boxes-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Claude Code MCP server for GNOME Boxes (libvirt/virsh)",
+  "license": "MIT",
+  "scripts": {
+    "build": "tsc -p .",
+    "start": "node dist/src/index.js",
+    "dev": "node --watch dist/src/index.js",
+    "compile": "tsc -p .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.7.5",
+    "@vitest/coverage-v8": "^3.2.4",
+    "typescript": "^5.6.3",
+    "vitest": "^3.2.4"
+  }
+}
