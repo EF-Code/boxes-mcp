@@ -11,6 +11,74 @@ export interface ClipboardRequest {
   text?: string;
 }
 
+export type ClipboardPhase = "idle" | "awaiting-data" | "awaiting-request" | "sending" | "complete" | "failed";
+
+export interface ClipboardState {
+  operation: "read" | "write";
+  phase: ClipboardPhase;
+  maxBytes: number;
+  text: string;
+  bytes: number;
+  errorCode?: "SPICE_AGENT_DISCONNECTED" | "CLIPBOARD_TOO_LARGE" | "INVALID_ARGUMENT";
+}
+
+export type ClipboardEvent =
+  | { type: "agent-connected"; clipboard: boolean }
+  | { type: "guest-grab"; hasUtf8: boolean }
+  | { type: "guest-request"; hasUtf8: boolean }
+  | { type: "data"; text: string; final: boolean }
+  | { type: "release" }
+  | { type: "disconnect" }
+  | { type: "cancel" };
+
+export function initialClipboardState(operation: "read" | "write", maxBytes: number): ClipboardState {
+  return { operation, phase: "idle", maxBytes, text: "", bytes: 0 };
+}
+
+function failed(state: ClipboardState, errorCode: ClipboardState["errorCode"]): ClipboardState {
+  return { ...state, phase: "failed", errorCode };
+}
+
+/** Pure reducer for the SPICE clipboard grab/request/notify/release lifecycle. */
+export function reduceClipboardState(state: ClipboardState, event: ClipboardEvent): ClipboardState {
+  if (state.phase === "complete" || state.phase === "failed") return state;
+  if (event.type === "disconnect" || event.type === "cancel") {
+    return failed(state, "SPICE_AGENT_DISCONNECTED");
+  }
+  if (event.type === "agent-connected") {
+    return event.clipboard ? state : failed(state, "SPICE_AGENT_DISCONNECTED");
+  }
+  if (event.type === "guest-grab") {
+    if (state.operation !== "read" || !event.hasUtf8) return failed(state, "INVALID_ARGUMENT");
+    if (state.phase === "awaiting-data") return state;
+    return { ...state, phase: "awaiting-data" };
+  }
+  if (event.type === "guest-request") {
+    if (state.operation !== "write" || !event.hasUtf8) return failed(state, "INVALID_ARGUMENT");
+    if (state.phase === "sending") return state;
+    return { ...state, phase: "sending" };
+  }
+  if (event.type === "data") {
+    if (state.operation !== "read" || state.phase !== "awaiting-data") {
+      return failed(state, "INVALID_ARGUMENT");
+    }
+    const bytes = state.bytes + Buffer.byteLength(event.text, "utf8");
+    if (bytes > state.maxBytes) return failed(state, "CLIPBOARD_TOO_LARGE");
+    return {
+      ...state,
+      phase: event.final ? "complete" : "awaiting-data",
+      text: state.text + event.text,
+      bytes
+    };
+  }
+  if (event.type === "release") {
+    return state.operation === "write" && state.phase === "sending"
+      ? { ...state, phase: "complete" }
+      : failed(state, "SPICE_AGENT_DISCONNECTED");
+  }
+  return state;
+}
+
 function validateClipboardResult(value: unknown, maximum: number): { text: string; bytes: number } {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     throw new BoxesError("BACKEND_UNAVAILABLE", "SPICE helper returned an invalid clipboard result");
@@ -21,6 +89,21 @@ function validateClipboardResult(value: unknown, maximum: number): { text: strin
     throw new BoxesError("CLIPBOARD_TOO_LARGE", "SPICE helper returned invalid or oversized clipboard text");
   }
   return { text: result.text, bytes: result.bytes };
+}
+
+function validateClipboardWriteResult(value: unknown): { backend: "spice"; completed: true } {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw new BoxesError("BACKEND_UNAVAILABLE", "SPICE helper returned an invalid clipboard completion");
+  }
+  const result = value as Record<string, unknown>;
+  if (result.backend !== "spice" || result.completed !== true) {
+    throw new BoxesError("BACKEND_UNAVAILABLE", "SPICE helper did not confirm clipboard completion");
+  }
+  return { backend: "spice", completed: true };
+}
+
+export function clipboardResultForTest(value: unknown, operation: "read" | "write", maximum: number): unknown {
+  return operation === "read" ? validateClipboardResult(value, maximum) : validateClipboardWriteResult(value);
 }
 
 export function parseClipboardRequest(value: unknown): ClipboardRequest {
@@ -57,6 +140,6 @@ export async function clipboard(value: unknown): Promise<unknown> {
     ok: true,
     backend: "spice",
     operation: request.operation,
-    result: request.operation === "read" ? validateClipboardResult(result, maxBytes) : result
+    result: clipboardResultForTest(result, request.operation, maxBytes)
   };
 }
