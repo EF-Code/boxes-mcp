@@ -42,7 +42,12 @@ for (const letter of "ABCDEFGHIJKLMNOPQRSTUVWXYZ") KEY_NAMES[letter] = `KEY_${le
 for (let digit = 0; digit <= 9; digit += 1) KEY_NAMES[`DIGIT_${digit}`] = `KEY_${digit}`;
 for (let functionKey = 1; functionKey <= 12; functionKey += 1) KEY_NAMES[`F${functionKey}`] = `KEY_F${functionKey}`;
 
-export const allowedKeyboardKeys = Object.freeze(Object.keys(KEY_NAMES));
+export const allowedKeyboardKeys = Object.freeze(Object.keys(KEY_NAMES).sort());
+
+/** Canonical public names and their fixed Linux virsh codeset mapping. */
+export const keyboardKeyTable = Object.freeze(
+  allowedKeyboardKeys.map(publicName => ({ publicName, virshName: KEY_NAMES[publicName] }))
+);
 
 export function parseKeyboardRequest(value: unknown): KeyboardRequest {
   const args = asRecord(value);
@@ -54,6 +59,9 @@ export function parseKeyboardRequest(value: unknown): KeyboardRequest {
     if (!(publicName in KEY_NAMES)) throw new BoxesError("INVALID_KEY", `Unsupported key: ${publicName}`);
     return publicName;
   });
+  if (new Set(keys).size !== keys.length) {
+    throw new BoxesError("INVALID_KEY", "keys must not contain duplicates");
+  }
   return {
     nameOrUuid: requireNameOrUuid(args),
     keys,
@@ -65,16 +73,24 @@ export async function sendKeyboard(value: unknown): Promise<{ ok: true; backend:
   const request = parseKeyboardRequest(value);
   await requireRunningDomain(request.nameOrUuid);
   const virshKeys = request.keys.map(key => KEY_NAMES[key]);
-  await sh(VIRSH, [
-    ...commonArgs(),
-    "send-key",
-    request.nameOrUuid,
-    "--codeset",
-    "linux",
-    "--holdtime",
-    String(request.holdMs),
-    ...virshKeys
-  ]);
+  try {
+    await sh(VIRSH, [
+      ...commonArgs(),
+      "send-key",
+      request.nameOrUuid,
+      "--codeset",
+      "linux",
+      "--holdtime",
+      String(request.holdMs),
+      ...virshKeys
+    ]);
+  } catch (error) {
+    const candidate = error as { code?: unknown; killed?: unknown };
+    if (candidate.code === "ETIMEDOUT" || candidate.killed === true) {
+      throw new BoxesError("OPERATION_TIMEOUT", "Keyboard input timed out", { cause: error });
+    }
+    throw new BoxesError("BACKEND_UNAVAILABLE", "virsh could not send keyboard input", { cause: error });
+  }
   return { ok: true, backend: "virsh", keys: request.keys, holdMs: request.holdMs };
 }
 

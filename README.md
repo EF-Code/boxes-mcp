@@ -134,6 +134,15 @@ not available.
 `BOXES_TRANSFER_ROOT` is deliberately required rather than inferred. Paths are
 canonicalized and symlink escapes, directories, and special files are rejected.
 
+Keyboard input uses one fixed Linux virsh codeset. Public key names are
+case-insensitive and canonicalized to uppercase, but each key may occur only once
+per bounded chord. The allowlist is: `ALT`, `BACKSPACE`, `CAPSLOCK`, `CTRL`,
+`DELETE`, `DIGIT_0` through `DIGIT_9`, `DOWN`, `END`, `ENTER`, `ESC`, `ESCAPE`,
+`F1` through `F12`, `HOME`, `INSERT`, `LEFT`, `META`, `NUMLOCK`, `PAGEDOWN`,
+`PAGEUP`, `PAUSE`, `PRINT`, `RIGHT`, `SHIFT`, `SPACE`, `SUPER`, `TAB`, `UP`,
+and `A` through `Z`. Guest keyboard layout determines the resulting character;
+the key allowlist does not guarantee text independent of that layout.
+
 ## Usage Examples
 
 ### With Claude Code
