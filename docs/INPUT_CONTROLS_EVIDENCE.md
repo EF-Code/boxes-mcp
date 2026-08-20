@@ -217,13 +217,13 @@ accepted the drop. A real viewer/desktop harness is required to change
 | Screenshot | `src/screenshot.ts`, `src/screenshot.test.ts` | Mocked virsh, bounded artifact cleanup and failure paths | `virsh screenshot` against named disposable VM | VERIFIED |
 | Keyboard | `src/keyboard.ts`, `src/keyboard.test.ts` | Mocked exact virsh argument arrays and errors | Harmless `ESC` against named disposable VM | VERIFIED |
 | QMP mouse | `src/qmp.ts`, `src/mouse.ts`, `src/qmp.test.ts`, `src/mouse.test.ts` | Mocked query/event JSON and absolute-pointer rejection | QMP discovery and movement on disposable VM | VERIFIED |
-| Persistent TypeScript helper | `src/spice.ts`, `src/spice.test.ts` | Local persistent fake helper, correlation, crash, timeout, malformed/oversized frames | Real SPICE endpoint | IMPLEMENTED-UNVERIFIED-LIVE |
-| Native helper framing/session | `native/spice-helper.c`, `src/native-helper.test.ts` | Native compile and local process malformed/status failure checks | Real SPICE channel | IMPLEMENTED-UNVERIFIED-LIVE |
-| SPICE mouse | Native inputs channel and `src/mouse.ts` | Typed status/result validation and source build | Real inputs channel and visible target | IMPLEMENTED-UNVERIFIED-LIVE |
-| Guest-agent clipboard | Native agent callbacks, `src/clipboard.ts`, `src/clipboard.test.ts` | Reducer fixtures and helper protocol failure boundary | Both directions plus manually disconnected-agent error | IMPLEMENTED-UNVERIFIED-LIVE |
-| SPICE file transfer | Native async file-copy path, `src/transfer.ts`, `src/transfer.test.ts` | Path confinement, exact completion validation, native build | Disposable Linux guest destination semantics | IMPLEMENTED-UNVERIFIED-LIVE |
-| Drag/drop | Native coordinator, `src/drag-drop.ts`, `src/drag-drop.test.ts` | State/evidence fixtures and cleanup path | Real target application acceptance | BLOCKED-LIVE |
-| Opt-in harness | `src/integration.test.ts` | Safe default: 9 live tests skipped | Explicit disposable VM: 4 passed, 5 honest skips | VERIFIED |
+| Persistent TypeScript helper | `src/spice.ts`, `src/spice.test.ts` | Local persistent fake helper, correlation, crash, timeout, malformed/oversized frames | Real SPICE endpoint through persistent status/mouse/transfer requests | VERIFIED |
+| Native helper framing/session | `native/spice-helper.c`, `src/native-helper.test.ts` | Native compile and local process malformed/status failure checks | Real libvirt graphics-FD SPICE session | VERIFIED |
+| SPICE mouse | Native inputs channel and `src/mouse.ts` | Typed status/result validation and source build | Real inputs channel; normalized move completed at 1280x800 | VERIFIED |
+| Guest-agent clipboard | Native agent callbacks, `src/clipboard.ts`, `src/clipboard.test.ts` | Reducer fixtures and helper protocol failure boundary | Omarchy agent connected but clipboard capability not announced; round-trip unavailable | BLOCKED-LIVE |
+| SPICE file transfer | Native async file-copy path, `src/transfer.ts`, `src/transfer.test.ts` | Path confinement, exact completion validation, native build | 46-byte confined fixture completed through disposable Omarchy SPICE transfer | VERIFIED for transport; destination semantics unverified |
+| Drag/drop | Native coordinator, `src/drag-drop.ts`, `src/drag-drop.test.ts` | State/evidence fixtures and cleanup path | Live transfer and pointer release observed; application acceptance remained `unknown` | IMPLEMENTED-UNVERIFIED-LIVE |
+| Opt-in harness | `src/integration.test.ts` | Safe default: 9 live tests skipped | Explicit Omarchy VM: 7 passed, 2 honest skips | VERIFIED |
 
 ## Current live-boundary result
 
@@ -253,14 +253,14 @@ libvirt screenshot                      PASS on ubuntu24.04 and archlinux
 virsh send-key ESC                      PASS on ubuntu24.04 and archlinux
 QMP query-commands/query-mice           PASS on ubuntu24.04 and archlinux
 QMP normalized move                     PASS on ubuntu24.04 and archlinux (0.5, 0.5; backend=qmp)
-SPICE mouse                             SKIPPED: no usable display endpoint
-SPICE clipboard                         SKIPPED: no usable display endpoint
-SPICE file transfer                     SKIPPED: no approved source/root and no usable endpoint
-drag/drop                               SKIPPED: no approved source/root/target and no usable endpoint
+SPICE mouse                             PASS on archlinux via libvirt graphics FD; 1280x800, client mouse mode
+SPICE clipboard                         SKIPPED: guest agent does not announce clipboard capability
+SPICE file transfer                     PASS on archlinux via real async SPICE copy; 46-byte confined fixture
+drag/drop                               PASS for transfer and pointer release; application acceptance=unknown
 guest-agent disconnect                  SKIPPED: not manually staged
 ```
 
-The exact SPICE boundary blocker is reproducible:
+The original endpoint symptom remains reproducible through the viewer-oriented libvirt lookup:
 
 ```text
 virsh -c qemu:///session domdisplay archlinux
@@ -269,14 +269,26 @@ error: No graphical display found
 
 Both active XML documents contain
 `<graphics type='spice'><listen type='none'/></graphics>` and a connected
-`com.redhat.spice.0` channel. The fixed QMP `query-spice` probe for `archlinux`
-reported SPICE enabled with Unix channels but no usable URI/path; the structured
-capability result was `qmp=connected`, `spice=unconfigured`, and
-`clipboard/fileTransfer=capability-missing`. Therefore the implementation does not
-infer SPICE readiness from XML or the agent channel alone; clipboard, file-transfer,
-and SPICE mouse remain unverified at the real SPICE boundary. `spice-gtk-3.0`,
-`remote-viewer`, and `virt-viewer` are unavailable on this host.
+`com.redhat.spice.0` channel. The implementation now treats this as an internal
+libvirt-FD transport, not as a public viewer URI: `boxes.display` returns
+`spice+libvirt-fd://local`, and the native helper obtains one graphics FD per SPICE
+channel with `virDomainOpenGraphicsFD`. The Omarchy capability snapshot was:
 
-The remaining blocked live work requires a reachable SPICE endpoint (or an
-authorized libvirt graphics-FD integration), an approved confined transfer fixture,
-and a controlled target application if application-level drag acceptance is required.
+```json
+{
+  "display": { "display": "spice+libvirt-fd://local", "protocol": "spice", "transport": "libvirt-fd" },
+  "domain": { "graphics": "spice", "graphicsListenType": "none", "hasSpiceAgentChannel": true, "hasAbsolutePointer": true },
+  "backends": {
+    "qmp": { "state": "connected" },
+    "spice": { "state": "connected" },
+    "clipboard": { "state": "agent-disconnected", "reason": "The SPICE guest agent does not announce clipboard capability" },
+    "fileTransfer": { "state": "connected" }
+  }
+}
+```
+
+`spice-gtk-3.0`, `remote-viewer`, and `virt-viewer` are unavailable on this host;
+they are not required for the internal graphics-FD path. Remaining live blockers are
+the guest clipboard capability, manually staged guest-agent disconnect coverage,
+and application-level drag acceptance. The transfer destination was not inspected
+inside the guest, so transport completion must not be read as destination semantics.

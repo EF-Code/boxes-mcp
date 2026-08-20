@@ -30,7 +30,9 @@ A lightweight Model Context Protocol (MCP) server that enables Claude Code to ma
 SPICE-backed tools additionally require a SPICE display, a guest virtio-serial agent
 channel, and a running `spice-vdagent` (or equivalent guest agent). Build the optional
 native helper only when the host provides `spice-client-glib`, `json-glib`, and GLib
-development files:
+development files. For libvirt domains whose graphics XML uses `listen type='none'`,
+the helper uses libvirt's local graphics-FD API; no `remote-viewer`, `virt-viewer`, or
+public SPICE URI is required:
 
 ```bash
 npm run build:spice-helper
@@ -326,7 +328,7 @@ credentials.
 | Keyboard | Implemented via allowlisted `virsh send-key` | Not used | Not used |
 | Mouse | Not used | Typed `input-send-event` after QMP discovery | Selected by `auto` only after helper status proves channels and geometry |
 | Clipboard | Not available | Not available | Real agent protocol in native helper; live guest-agent proof pending |
-| File transfer | Not available | Not available | Real SPICE async file-copy path in native helper; live guest proof pending |
+| File transfer | Not available | Not available | Real SPICE async file-copy path in native helper; live transport completion observed when the guest agent advertises it |
 | Drag-and-drop | Not available | Not available | Experimental transfer + pointer evidence; application acceptance remains unknown |
 
 See [the interaction evidence matrix](docs/INPUT_CONTROLS_EVIDENCE.md) for the
@@ -363,6 +365,25 @@ Open `virt-manager` and check which connection your VMs use:
 Set `LIBVIRT_URI` environment variable accordingly.
 
 ### SPICE capability errors
+
+If `virsh domdisplay` reports `No graphical display found` and the domain XML has
+`<graphics type='spice'><listen type='none'/></graphics>`, that is an intentional
+libvirt configuration with no public listener. Do not invent a port or change the VM
+definition just to obtain a viewer URI. With the native helper configured, boxes-mcp
+uses the internal `spice+libvirt-fd://local` transport and asks libvirt for a graphics
+FD for each SPICE channel. The helper must use the same libvirt connection as the MCP
+process:
+
+```bash
+LIBVIRT_URI=qemu:///session npm run build:spice-helper
+BOXES_SPICE_HELPER="$PWD/native/boxes-spice-helper" \
+LIBVIRT_URI=qemu:///session node dist/src/index.js
+```
+
+The domain must be running, the helper must be linked against libvirt and
+`spice-client-glib`, and the guest must expose the virtio SPICE agent channel. A
+connected agent may still lack clipboard capability; inspect `boxes.capabilities` with
+`probeSpice: true` instead of inferring support from the XML alone.
 
 Use `boxes.capabilities` with `probeSpice: true` and inspect the returned state:
 
