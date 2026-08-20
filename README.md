@@ -336,12 +336,14 @@ credentials.
 | Screenshot | Implemented via `virsh screenshot` | Not used | Adapter reserved, unavailable without helper |
 | Keyboard | Implemented via allowlisted `virsh send-key` | Not used | Not used |
 | Mouse | Not used | Typed `input-send-event` after QMP discovery | Selected by `auto` only after helper status proves channels and geometry |
-| Clipboard | Not available | Not available | Real agent protocol in native helper; live guest-agent proof pending |
+| Clipboard | Not available | Not available | Real agent protocol in native helper; Wayland/Hyprland guests may report `SPICE_CAPABILITY_MISSING` |
 | File transfer | Not available | Not available | Real SPICE async file-copy path in native helper; live transport completion observed when the guest agent advertises it |
 | Drag-and-drop | Not available | Not available | Experimental transfer + pointer evidence; application acceptance remains unknown |
 
-See [the interaction evidence matrix](docs/INPUT_CONTROLS_EVIDENCE.md) for the
-boundary-by-boundary status and exact local/live proof distinction.
+Clipboard support depends on guest desktop integration. The current SPICE guest
+agent is X11-oriented, so Wayland guests such as Hyprland/Omarchy may report
+`SPICE_CAPABILITY_MISSING` even when `spice-vdagent` is installed and running. Mouse
+and file transfer can still work independently.
 
 ## Troubleshooting
 
