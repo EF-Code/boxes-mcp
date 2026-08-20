@@ -33,14 +33,20 @@ export async function dragDrop(value: unknown): Promise<unknown> {
   const source: TransferSource = await validateTransferSource(request.sourcePath);
   const endpoint = await displayEndpoint(request.nameOrUuid);
   if (endpoint.protocol !== "spice") throw new BoxesError("UNSUPPORTED_DISPLAY", "Drag-and-drop requires a SPICE display");
-  const result = await callSpiceHelper("drag-drop", request.nameOrUuid, endpoint, {
-    sourcePath: source.sourcePath,
-    x: request.x,
-    y: request.y,
-    coordinateSpace: request.coordinateSpace,
-    width: request.width,
-    height: request.height,
-    timeoutMs: request.timeoutMs
+  const result = await callSpiceHelper({
+    operation: "drag-drop",
+    domain: request.nameOrUuid,
+    display: endpoint,
+    arguments: {
+      sourcePath: source.sourcePath,
+      x: request.x,
+      y: request.y,
+      coordinateSpace: request.coordinateSpace,
+      width: request.width,
+      height: request.height,
+      maxBytes: source.bytes,
+      timeoutMs: request.timeoutMs
+    }
   });
   return {
     ok: true,

@@ -103,16 +103,21 @@ export async function sendMouse(value: unknown): Promise<Record<string, unknown>
 
   if (request.backend === "spice") {
     if (endpoint?.protocol === "spice" && spiceHelperConfigured()) {
-      await callSpiceHelper("mouse", request.nameOrUuid, endpoint, {
-        action: request.action,
-        x: request.x,
-        y: request.y,
-        coordinateSpace: request.coordinateSpace,
-        width: request.width,
-        height: request.height,
-        button: request.button,
-        deltaX: request.deltaX,
-        deltaY: request.deltaY
+      await callSpiceHelper({
+        operation: "mouse",
+        domain: request.nameOrUuid,
+        display: endpoint,
+        arguments: {
+          action: request.action,
+          x: request.x,
+          y: request.y,
+          coordinateSpace: request.coordinateSpace,
+          width: request.width,
+          height: request.height,
+          button: request.button,
+          deltaX: request.deltaX,
+          deltaY: request.deltaY
+        }
       });
       return {
         ok: true,

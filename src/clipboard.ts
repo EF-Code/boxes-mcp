@@ -31,10 +31,15 @@ export async function clipboard(value: unknown): Promise<unknown> {
   const endpoint = await displayEndpoint(request.nameOrUuid);
   if (endpoint.protocol !== "spice") throw new BoxesError("UNSUPPORTED_DISPLAY", "Clipboard requires a SPICE display");
   const maxBytes = parseEnvironmentInteger("BOXES_MAX_CLIPBOARD_BYTES", 1_048_576, 1, 100 * 1024 * 1024);
-  const result = await callSpiceHelper(`clipboard.${request.operation}`, request.nameOrUuid, endpoint, {
-    selection: request.selection,
-    text: request.text,
-    maxBytes
+  const result = await callSpiceHelper({
+    operation: request.operation === "read" ? "clipboard.read" : "clipboard.write",
+    domain: request.nameOrUuid,
+    display: endpoint,
+    arguments: {
+      selection: request.selection,
+      text: request.text,
+      maxBytes
+    }
   });
   return { ok: true, backend: "spice", operation: request.operation, result };
 }
