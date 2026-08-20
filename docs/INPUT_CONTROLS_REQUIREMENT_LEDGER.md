@@ -12,7 +12,7 @@ means safe source and local tests exist but the external boundary was not exerci
 | P.2 | Preserve pre-existing `package-lock.json` changes | No lockfile edits or staging | Final staged-name checks | Final report | `git diff -- package-lock.json` | VERIFIED | all commits |
 | P.3 | Use shared `virsh.ts`/`libvirt.ts` seam | Existing files retained and extended | `src/libvirt.test.ts` | Project structure in README | Existing lifecycle boundary | VERIFIED | 91af743 |
 | P.4 | Use `/home/wellington/env/bin/python` if Python is introduced | No Python introduced | N/A | Final report | N/A | VERIFIED | all commits |
-| 1.1 | Capability state is observed, not configuration-only | `src/capabilities.ts` status probes | `src/capabilities.test.ts` | README capability errors | Live libvirt/helper status | IMPLEMENTED-UNVERIFIED-LIVE | 50f22ec |
+| 1.1 | Capability state is observed, not configuration-only | `src/capabilities.ts` status probes | `src/capabilities.test.ts` | README capability errors | Live libvirt/helper status | IMPLEMENTED-UNVERIFIED-LIVE | 50f22ec, 0b91744 |
 | 1.2 | Model unconfigured/configured/connecting/connected/agent-disconnected/capability-missing | `CapabilityState`, SPICE mapping | `src/capabilities.test.ts` | README state definitions | Live channel transitions | IMPLEMENTED-UNVERIFIED-LIVE | 91af743, 50f22ec |
 | 1.3 | Parse allowlisted QEMU/display XML facts only | `src/display.ts`, `src/libvirt.ts` | `src/display.test.ts`, `src/capabilities.test.ts` | Evidence matrix | Active-domain XML | IMPLEMENTED-UNVERIFIED-LIVE | 91af743, 50f22ec |
 | 1.4 | Probe QMP commands and absolute pointer | `src/qmp.ts` | `src/qmp.test.ts`, `src/mouse.test.ts` | Evidence matrix | Live QMP query | IMPLEMENTED-UNVERIFIED-LIVE | 1a4bb98 |
@@ -26,10 +26,10 @@ means safe source and local tests exist but the external boundary was not exerci
 | 3.1 | Finite documented keyboard allowlist | `src/keyboard.ts` canonical table | `src/keyboard.test.ts` | README and evidence doc | Live harmless key | IMPLEMENTED-UNVERIFIED-LIVE | 38f83cc |
 | 3.2 | Case/duplicate/modifier/length/hold/timeout/error policy | `src/keyboard.ts` | keyboard validation/failure tests | Evidence doc | Live harmless sequence | IMPLEMENTED-UNVERIFIED-LIVE | 38f83cc |
 | 3.3 | One canonical table drives runtime/tests/docs | `keyboardKeyTable`, exported allowlist | table-size/mapping test | Complete allowlist in docs | Live key mapping | IMPLEMENTED-UNVERIFIED-LIVE | 38f83cc |
-| 3.4 | Document guest-layout limitation | README and evidence doc | N/A | README/evidence doc | Guest layout observation | VERIFIED | docs commit |
-| 4.1 | Typed QMP query responses and absolute pointer requirement | `src/qmp.ts` | QMP probe tests | Evidence matrix | Live QMP query | IMPLEMENTED-UNVERIFIED-LIVE | 1a4bb98 |
+| 3.4 | Document guest-layout limitation | README and evidence doc | N/A | README/evidence doc | Guest layout observation | VERIFIED | ac2ef8b |
+| 4.1 | Typed QMP query responses and absolute pointer requirement | `src/qmp.ts` | QMP probe tests | Evidence matrix | Live QMP query | IMPLEMENTED-UNVERIFIED-LIVE | 1a4bb98, 0b91744 |
 | 4.2 | Discriminated mouse schemas | `src/tools.ts`, `src/mouse.ts` | mouse parser tests | Evidence doc | Live input | IMPLEMENTED-UNVERIFIED-LIVE | 1a4bb98 |
-| 4.3 | Reject malformed coordinates/buttons/deltas/batches | `src/validation.ts`, `src/qmp.ts` | validation/QMP/mouse tests | Evidence doc | Live negative boundary | VERIFIED | 1a4bb98 |
+| 4.3 | Reject malformed coordinates/buttons/deltas/batches | `src/validation.ts`, `src/qmp.ts` | validation/QMP/mouse tests | Evidence doc | Live negative boundary | VERIFIED | 1a4bb98, 0b91744 |
 | 4.4 | Return backend/display/head identity | `src/mouse.ts`, typed SPICE result | mouse tests | Evidence examples | Live backend selection | IMPLEMENTED-UNVERIFIED-LIVE | 50f22ec |
 | 4.5 | Remove unsafe standalone button state operations | `MouseAction` only move/click/scroll | mouse rejection test | Evidence doc | Live click cleanup | VERIFIED | 1a4bb98 |
 | 4.6 | Exact QMP ordering/conversion/scroll/failure tests | `src/qmp.ts`, `src/mouse.ts` | QMP/mouse suites | Evidence matrix | Live target | IMPLEMENTED-UNVERIFIED-LIVE | 1a4bb98 |
@@ -37,12 +37,12 @@ means safe source and local tests exist but the external boundary was not exerci
 | 5.2 | Persistent process/session keyed by domain+endpoint | `src/spice.ts`, native session state | spice/native-helper tests | Protocol docs | Endpoint/reconnect live proof | IMPLEMENTED-UNVERIFIED-LIVE | 38561cd, e01dd47 |
 | 5.3 | Typed status/mouse/clipboard/file operations | `SpiceOperation` union and native dispatch | spice/native-helper tests | Protocol docs | Real operation boundaries | IMPLEMENTED-UNVERIFIED-LIVE | 38561cd, e01dd47 |
 | 5.4 | JSONL IDs/limits/progress/parse errors | TS client/native framing | spice/native-helper tests | Protocol docs | Real helper session | IMPLEMENTED-UNVERIFIED-LIVE | 38561cd, e01dd47 |
-| 5.5 | Timeouts/cancellation/channel lifecycle/reconnect/crash handling | TS pending map; native cancellable/session cleanup | spice lifecycle tests | README troubleshooting | Real disconnect/reconnect | IMPLEMENTED-UNVERIFIED-LIVE | 38561cd, e01dd47 |
+| 5.5 | Timeouts/cancellation/channel lifecycle/reconnect/crash handling | TS pending map; native cancellable/session cleanup | spice lifecycle tests | README troubleshooting | Real disconnect/reconnect | IMPLEMENTED-UNVERIFIED-LIVE | 38561cd, e01dd47, 0b91744 |
 | 5.6 | Sensitive-data-safe logging | No payload logging in helper/client | Source inspection/local helper | README security | Host process audit | VERIFIED | e01dd47 |
 | 5.7 | No arbitrary helper/protocol passthrough | Fixed executable, empty argv, typed union | spice framing tests | README security | Adversarial MCP call | VERIFIED | 38561cd |
 | 6.1 | SPICE inputs position/motion/button press/release | Native `do_mouse` | mouse/status tests | Evidence doc | Real inputs channel | IMPLEMENTED-UNVERIFIED-LIVE | e01dd47, 50f22ec |
-| 6.2 | Validate mode/channel readiness | Status preflight and typed result | `src/mouse.test.ts`, `src/spice.test.ts` | Evidence doc | Live status transition | IMPLEMENTED-UNVERIFIED-LIVE | 50f22ec |
-| 6.3 | Correct masks and release cleanup | Native click/drag masks | drag reducer/native build | Evidence doc | Live interrupted gesture | IMPLEMENTED-UNVERIFIED-LIVE | 7c97c11 |
+| 6.2 | Validate mode/channel readiness | Status preflight and typed result | `src/mouse.test.ts`, `src/spice.test.ts` | Evidence doc | Live status transition | IMPLEMENTED-UNVERIFIED-LIVE | 50f22ec, 0b91744 |
+| 6.3 | Correct masks and release cleanup | Native click/drag masks | drag reducer/native build | Evidence doc | Live interrupted gesture | IMPLEMENTED-UNVERIFIED-LIVE | 7c97c11, 0b91744 |
 | 6.4 | Auto selection and no mid-operation fallback | `src/mouse.ts` | mouse/status tests | README | Live SPICE/QMP selection | IMPLEMENTED-UNVERIFIED-LIVE | 50f22ec |
 | 6.5 | Fake-helper ordering/cancel/crash coverage | `src/spice.test.ts`, mouse tests | Local helper suite | Evidence matrix | Live helper crash/disconnect | IMPLEMENTED-UNVERIFIED-LIVE | 38561cd, 50f22ec |
 | 7.1 | Real agent connectivity/capabilities/grab/request/notify/release | Native callbacks and `clipboard.ts` reducer | `src/clipboard.test.ts` | Evidence doc | Live guest agent | IMPLEMENTED-UNVERIFIED-LIVE | 91b8aa8, 7c97c11 |
@@ -57,8 +57,8 @@ means safe source and local tests exist but the external boundary was not exerci
 | 8.5 | Real transfer and destination semantics | Opt-in `transferFile` test | integration harness | Evidence doc | Disposable Linux guest | BLOCKED-LIVE | 9b7d77e |
 | 9.1 | Require all channels/file-transfer before drag | `src/drag-drop.ts` preflight | drag tests | Evidence doc | Live SPICE status | IMPLEMENTED-UNVERIFIED-LIVE | 7c97c11 |
 | 9.2 | Resolve geometry and destination before events | Native geometry/TS coordinates | drag parser tests | Evidence doc | Live display geometry | IMPLEMENTED-UNVERIFIED-LIVE | 7c97c11 |
-| 9.3 | Explicit transfer/pointer/progress/cancel state machine | TS reducer and native sequence | drag reducer tests | Evidence doc | Live harness | IMPLEMENTED-UNVERIFIED-LIVE | 7c97c11 |
-| 9.4 | Guarantee release after partial failure | Native cleanup branch and state evidence | drag failure test | Evidence doc | Interrupted live gesture | IMPLEMENTED-UNVERIFIED-LIVE | 7c97c11 |
+| 9.3 | Explicit transfer/pointer/progress/cancel state machine | TS reducer and native sequence | drag reducer tests | Evidence doc | Live harness | IMPLEMENTED-UNVERIFIED-LIVE | 7c97c11, 0b91744 |
+| 9.4 | Guarantee release after partial failure | Native cleanup branch and state evidence | drag failure test | Evidence doc | Interrupted live gesture | IMPLEMENTED-UNVERIFIED-LIVE | 7c97c11, 0b91744 |
 | 9.5 | Separate transfer/release/application/evidence fields | `validateDragResult` | drag evidence tests | Examples/matrix | Live app evidence | IMPLEMENTED-UNVERIFIED-LIVE | 7c97c11 |
 | 9.6 | Only claim observable application acceptance | Always `unknown` without harness | drag evidence test | README/docs | Real target app | BLOCKED-LIVE | 7c97c11 |
 | 9.7 | Viewer harness only with explicit dependency/authorization | No package install; experimental raw sequence | N/A | README limitation | remote-viewer/desktop harness | BLOCKED-LIVE | 7c97c11 |
@@ -66,12 +66,12 @@ means safe source and local tests exist but the external boundary was not exerci
 | 10.2 | Never choose first VM or infer disposable | Explicit `BOXES_TEST_VM` only | Harness source inspection | README/docs | Live test run | VERIFIED | 9b7d77e |
 | 10.3 | Exercise all boundaries where available | Screenshot/key/QMP/SPICE/clipboard/transfer/drag tests | Opt-in integration suite | Evidence matrix | Live run and versions | BLOCKED-LIVE | 9b7d77e |
 | 10.4 | Record QEMU/libvirt/SPICE/guest versions and states | Harness/docs recording fields | Integration output when enabled | Evidence doc | Live environment capture | BLOCKED-LIVE | 9b7d77e |
-| 10.5 | Preserve exact libvirt blocker and continue safe work | Documented command/error | Native/local suites | Evidence doc | Working libvirt socket | BLOCKED-LIVE | docs commit |
-| 11.1 | MCP examples for every implemented operation | Evidence document | N/A | Evidence document | N/A | VERIFIED | docs commit |
-| 11.2 | Document allowlist/layout/coords/backends/limits/dependencies/troubleshooting | README and evidence document | N/A | README/docs | N/A | VERIFIED | docs commit |
-| 11.3 | Document actually exercised environments | Evidence matrix and live result | N/A | Evidence document | Future live run update | VERIFIED | docs commit |
-| 11.4 | Maintain separate unit/local/libvirt/QMP/SPICE/agent/app evidence | Evidence matrix | N/A | Evidence document | Future boundary proof | VERIFIED | docs commit |
-| 11.5 | Avoid unsupported live claims | Wording uses pending/blocked/unknown | N/A | README/docs/final report | Review against live evidence | VERIFIED | docs commit |
+| 10.5 | Preserve exact libvirt blocker and continue safe work | Documented command/error | Native/local suites | Evidence doc | Working libvirt socket | BLOCKED-LIVE | ac2ef8b |
+| 11.1 | MCP examples for every implemented operation | Evidence document | N/A | Evidence document | N/A | VERIFIED | ac2ef8b |
+| 11.2 | Document allowlist/layout/coords/backends/limits/dependencies/troubleshooting | README and evidence document | N/A | README/docs | N/A | VERIFIED | ac2ef8b |
+| 11.3 | Document actually exercised environments | Evidence matrix and live result | N/A | Evidence document | Future live run update | VERIFIED | ac2ef8b |
+| 11.4 | Maintain separate unit/local/libvirt/QMP/SPICE/agent/app evidence | Evidence matrix | N/A | Evidence document | Future boundary proof | VERIFIED | ac2ef8b |
+| 11.5 | Avoid unsupported live claims | Wording uses pending/blocked/unknown | N/A | README/docs/final report | Review against live evidence | VERIFIED | ac2ef8b |
 
 The remaining `BLOCKED-LIVE` rows are external-boundary results, not omitted source
 work. The exact errors and the required next environment are recorded in

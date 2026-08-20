@@ -198,7 +198,8 @@ Drag/drop response:
     "evidence": [
       "SPICE file-transfer completion observed",
       "SPICE pointer release observed"
-    ]
+    ],
+    "postActionScreenshot": { "captured": false, "errorCode": "SPICE_UNAVAILABLE" }
   }
 }
 ```

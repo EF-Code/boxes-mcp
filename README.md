@@ -222,7 +222,7 @@ npm run test:watch
 npm run test:coverage
 ```
 
-**Local test coverage**: the current checkout runs 80 passing tests and 9 gated live
+**Local test coverage**: the current checkout runs 84 passing tests and 9 gated live
 tests skipped by default. The default suite is safe to run without libvirt access.
 
 - `exec.ts`: 100% statements
