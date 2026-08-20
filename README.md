@@ -14,7 +14,7 @@ A lightweight Model Context Protocol (MCP) server that enables Claude Code to ma
 - 🔒 **Safe Operations** - Storage preservation by default, no destructive actions
 - 🎯 **GNOME Boxes Compatible** - Works seamlessly with GNOME Boxes VMs
 - 🖱️ **Controlled Interaction** - Screenshot, allowlisted keyboard, and typed mouse tools
-- 🔌 **Capability-Gated SPICE** - Optional helper protocol for SPICE input, clipboard, and transfer
+- 🔌 **Capability-Gated SPICE** - Optional native helper protocol for SPICE input, clipboard, and transfer
 - ⚡ **Fast & Lightweight** - Minimal overhead, direct virsh integration
 
 ## Quick Start
@@ -28,9 +28,18 @@ A lightweight Model Context Protocol (MCP) server that enables Claude Code to ma
 - `virsh` available on `PATH` for lifecycle, screenshot, keyboard, and QMP fallback operations
 
 SPICE-backed tools additionally require a SPICE display, a guest virtio-serial agent
-channel, and a running `spice-vdagent` (or equivalent guest agent). The repository
-does not bundle a SPICE helper executable; set `BOXES_SPICE_HELPER` only to a reviewed
-companion process that implements the versioned stdio protocol described below.
+channel, and a running `spice-vdagent` (or equivalent guest agent). Build the optional
+native helper only when the host provides `spice-client-glib`, `json-glib`, and GLib
+development files:
+
+```bash
+npm run build:spice-helper
+BOXES_SPICE_HELPER="$PWD/native/boxes-spice-helper" npm test
+```
+
+The helper is not installed or selected automatically. Set `BOXES_SPICE_HELPER` only
+to the reviewed executable built from this repository or another process implementing
+the versioned protocol below.
 
 ```bash
 # Install dependencies
@@ -110,7 +119,7 @@ Add to your Claude Code config (`~/.claude/config.json`):
 | `boxes.keyboard` | Send a bounded allowlisted Linux key sequence through virsh | `nameOrUuid, keys: string[], holdMs?: number` |
 | `boxes.mouse` | Send typed move/button/click/scroll input | `nameOrUuid, action, x, y, coordinateSpace?, button?, width?, height?, deltaX?, deltaY?, backend?` |
 | `boxes.clipboard` | Explicit UTF-8 clipboard read/write through the SPICE helper | `nameOrUuid, operation, selection?, text?` |
-| `boxes.drag_drop` | Experimental confined file transfer plus mouse sequence | `nameOrUuid, sourcePath, x, y, coordinateSpace?, width?, height?, timeoutMs?` |
+| `boxes.drag_drop` | Experimental confined transfer plus pointer sequence and separate evidence | `nameOrUuid, sourcePath, x, y, coordinateSpace?, width?, height?, timeoutMs?` |
 
 Interaction tools never accept shell fragments, raw QMP JSON, arbitrary virsh
 flags, guest commands, or arbitrary transfer destinations. New operations require
@@ -133,6 +142,12 @@ not available.
 
 `BOXES_TRANSFER_ROOT` is deliberately required rather than inferred. Paths are
 canonicalized and symlink escapes, directories, and special files are rejected.
+
+`boxes.capabilities` reports observed states. Configuration alone is not treated as
+connected: use `probeQmp: true` and/or `probeSpice: true` when an external status
+probe is required. SPICE clipboard and transfer require a connected guest agent;
+`boxes.drag_drop` reports `applicationAccepted: "unknown"` unless an external viewer
+harness supplies application-level evidence.
 
 Keyboard input uses one fixed Linux virsh codeset. Public key names are
 case-insensitive and canonicalized to uppercase, but each key may occur only once
@@ -207,12 +222,33 @@ npm run test:watch
 npm run test:coverage
 ```
 
-**Test Coverage**: 55 tests, 100% passing
+**Local test coverage**: the current checkout runs 80 passing tests and 9 gated live
+tests skipped by default. The default suite is safe to run without libvirt access.
 
 - `exec.ts`: 100% statements
 - `libvirt.ts`: 81.3% statements, 92.85% branches
 - Interaction validation, command construction, QMP response mapping, artifact cleanup,
   helper framing, capability discovery, and path-confinement tests
+
+Run the explicit local native-helper process checks with:
+
+```bash
+npm run test:spice-helper
+```
+
+Run the disposable-VM suite only with all three safety variables set:
+
+```bash
+BOXES_INTEGRATION=1 \
+BOXES_TEST_VM=an-explicit-disposable-domain \
+BOXES_TEST_VM_DISPOSABLE=1 \
+npm run test:integration
+```
+
+The live suite never selects a listed VM, changes VM definitions, or stops a guest
+service. Guest-agent disconnect coverage requires the operator to manually disconnect
+`spice-vdagent` in the explicitly disposable guest and add
+`BOXES_TEST_AGENT_DISCONNECTED=1`.
 
 The default suite is mocked/local: it does not prove that QMP, SPICE, clipboard,
 or drag-and-drop works against a real VM. Live tests must be opt-in and target a
@@ -258,8 +294,8 @@ journalctl --user -fu boxes-mcp
 
 ### SPICE helper protocol
 
-The TypeScript server sends one compact JSON request per helper process invocation
-over stdin and expects one version-1 JSON response on stdout. The helper is only
+The TypeScript server starts one persistent helper child and sends newline-delimited
+version-1 JSON requests over stdin, correlating responses by request ID. The helper is
 called with an explicit executable path and no caller-controlled arguments. The
 request envelope is shaped like:
 
@@ -274,11 +310,13 @@ request envelope is shaped like:
 }
 ```
 
-Supported operation names are internal (`mouse`, `clipboard.read`,
-`clipboard.write`, and `drag-drop`). A helper error is mapped to a stable MCP
-error such as `SPICE_AGENT_DISCONNECTED`, `SPICE_CAPABILITY_MISSING`, or
-`SPICE_UNAVAILABLE`. No helper executable is configured or live SPICE boundary
-verified by the repository's default tests.
+Supported operation names are internal (`status`, `mouse`, `clipboard.read`,
+`clipboard.write`, `file.transfer`, and `drag-drop`). A helper error is mapped to a
+stable MCP error such as `SPICE_AGENT_DISCONNECTED`, `SPICE_CAPABILITY_MISSING`, or
+`SPICE_UNAVAILABLE`. Payloads, lines, pending requests, transfer sizes, clipboard
+bytes, and operation time are bounded. Progress events never complete a request.
+The helper does not log clipboard contents, file contents, SPICE tickets, or
+credentials.
 
 ### Capability matrix
 
@@ -286,10 +324,13 @@ verified by the repository's default tests.
 |------------|---------------|--------------|--------------|
 | Screenshot | Implemented via `virsh screenshot` | Not used | Adapter reserved, unavailable without helper |
 | Keyboard | Implemented via allowlisted `virsh send-key` | Not used | Not used |
-| Mouse | Not used | Implemented via typed `input-send-event` | Preferred by `auto` when configured |
-| Clipboard | Not available | Not available | Requires SPICE agent and helper; not live-verified |
-| File transfer | Not available | Not available | Requires SPICE agent and helper; not live-verified |
-| Drag-and-drop | Not available | Not available | Experimental; application acceptance not verified |
+| Mouse | Not used | Typed `input-send-event` after QMP discovery | Selected by `auto` only after helper status proves channels and geometry |
+| Clipboard | Not available | Not available | Real agent protocol in native helper; live guest-agent proof pending |
+| File transfer | Not available | Not available | Real SPICE async file-copy path in native helper; live guest proof pending |
+| Drag-and-drop | Not available | Not available | Experimental transfer + pointer evidence; application acceptance remains unknown |
+
+See [the interaction evidence matrix](docs/INPUT_CONTROLS_EVIDENCE.md) for the
+boundary-by-boundary status and exact local/live proof distinction.
 
 ## Troubleshooting
 
@@ -320,6 +361,27 @@ Open `virt-manager` and check which connection your VMs use:
 - User session: `qemu:///session`
 
 Set `LIBVIRT_URI` environment variable accordingly.
+
+### SPICE capability errors
+
+Use `boxes.capabilities` with `probeSpice: true` and inspect the returned state:
+
+- `configured`: a reviewed helper and SPICE endpoint are configured, but connection
+  proof has not been requested;
+- `connecting`: the helper observed an incomplete channel set;
+- `connected`: the required channels are connected;
+- `agent-disconnected`: the guest agent is absent or does not announce clipboard;
+- `capability-missing`: the backend, channel, helper, or guest capability is absent.
+
+Check the host dependencies and helper directly without sending input to a VM:
+
+```bash
+pkg-config --modversion spice-client-glib-2.0 json-glib-1.0 gio-unix-2.0
+npm run build:spice-helper
+```
+
+The helper's local protocol test intentionally connects to `127.0.0.1:1` and
+expects a typed unavailable/disconnected result. That is not live SPICE proof.
 
 ## Roadmap
 
