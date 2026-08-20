@@ -28,7 +28,7 @@ means safe source and local tests exist but the external boundary was not exerci
 | 3.3 | One canonical table drives runtime/tests/docs | `keyboardKeyTable`, exported allowlist | table-size/mapping test | Complete allowlist in docs | Live key mapping | IMPLEMENTED-UNVERIFIED-LIVE | 38f83cc |
 | 3.4 | Document guest-layout limitation | README and evidence doc | N/A | README/evidence doc | Guest layout observation | VERIFIED | ac2ef8b |
 | 4.1 | Typed QMP query responses and absolute pointer requirement | `src/qmp.ts` | QMP probe tests | Evidence matrix | Live QMP query | VERIFIED | 1a4bb98, 0b91744; live query |
-| 4.2 | Discriminated mouse schemas | `src/tools.ts`, `src/mouse.ts` | mouse parser tests | Evidence doc | Live input | IMPLEMENTED-UNVERIFIED-LIVE | 1a4bb98 |
+| 4.2 | Discriminated mouse schemas | `src/tools.ts`, `src/mouse.ts` | mouse parser tests | Evidence doc | Live input | VERIFIED | 1a4bb98, d1b291a; live auto move and explicit SPICE click/scroll accepted typed actions |
 | 4.3 | Reject malformed coordinates/buttons/deltas/batches | `src/validation.ts`, `src/qmp.ts` | validation/QMP/mouse tests | Evidence doc | Live negative boundary | VERIFIED | 1a4bb98, 0b91744 |
 | 4.4 | Return backend/display/head identity | `src/mouse.ts`, typed SPICE result | mouse tests | Evidence examples | Live backend selection | VERIFIED | 50f22ec; live QMP result identified backend/head |
 | 4.5 | Remove unsafe standalone button state operations | `MouseAction` only move/click/scroll | mouse rejection test | Evidence doc | Live click cleanup | VERIFIED | 1a4bb98 |
@@ -43,7 +43,7 @@ means safe source and local tests exist but the external boundary was not exerci
 | 6.1 | SPICE inputs position/motion/button press/release | Native `do_mouse` | mouse/status tests | Evidence doc | Real inputs channel | VERIFIED | e01dd47, d1b291a; live normalized move completed on Omarchy inputs channel |
 | 6.2 | Validate mode/channel readiness | Status preflight and typed result | `src/mouse.test.ts`, `src/spice.test.ts` | Evidence doc | Live status transition | VERIFIED | 50f22ec, 0b91744, d1b291a, 11dd125; readiness polling avoids transient partial-channel false negatives |
 | 6.3 | Correct masks and release cleanup | Native click/drag masks | drag reducer/native build | Evidence doc | Live interrupted gesture | IMPLEMENTED-UNVERIFIED-LIVE | 7c97c11, 0b91744 |
-| 6.4 | Auto selection and no mid-operation fallback | `src/mouse.ts` | mouse/status tests | README | Live SPICE/QMP selection | IMPLEMENTED-UNVERIFIED-LIVE | 50f22ec |
+| 6.4 | Auto selection and no mid-operation fallback | `src/mouse.ts` | mouse/status tests | README | Live SPICE/QMP selection | VERIFIED | 50f22ec, d1b291a; live auto move selected SPICE after readiness proof |
 | 6.5 | Fake-helper ordering/cancel/crash coverage | `src/spice.test.ts`, mouse tests | Local helper suite | Evidence matrix | Live helper crash/disconnect | IMPLEMENTED-UNVERIFIED-LIVE | 38561cd, 50f22ec |
 | 7.1 | Real agent connectivity/capabilities/grab/request/notify/release | Native callbacks and `clipboard.ts` reducer | `src/clipboard.test.ts` | Evidence doc | Live guest agent | IMPLEMENTED-UNVERIFIED-LIVE | 91b8aa8, 7c97c11 |
 | 7.2 | UTF-8 only; reject unsupported/oversized/invalid data | Native and TS byte/UTF-8 checks | clipboard tests | README limits | Live malformed guest data | IMPLEMENTED-UNVERIFIED-LIVE | 91b8aa8, 7c97c11 |

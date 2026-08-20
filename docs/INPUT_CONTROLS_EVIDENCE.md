@@ -219,7 +219,7 @@ accepted the drop. A real viewer/desktop harness is required to change
 | QMP mouse | `src/qmp.ts`, `src/mouse.ts`, `src/qmp.test.ts`, `src/mouse.test.ts` | Mocked query/event JSON and absolute-pointer rejection | QMP discovery and movement on disposable VM | VERIFIED |
 | Persistent TypeScript helper | `src/spice.ts`, `src/spice.test.ts` | Local persistent fake helper, correlation, crash, timeout, malformed/oversized frames | Real SPICE endpoint through persistent status/mouse/transfer requests | VERIFIED |
 | Native helper framing/session | `native/spice-helper.c`, `src/native-helper.test.ts` | Native compile and local process malformed/status failure checks | Real libvirt graphics-FD SPICE session | VERIFIED |
-| SPICE mouse | Native inputs channel and `src/mouse.ts` | Typed status/result validation and source build | Real inputs channel; normalized move completed at 1280x800 | VERIFIED |
+| SPICE mouse | Native inputs channel and `src/mouse.ts` | Typed status/result validation and source build | Real inputs channel; auto move plus explicit click/scroll completed at 1280x800 | VERIFIED |
 | Guest-agent clipboard | Native agent callbacks, `src/clipboard.ts`, `src/clipboard.test.ts` | Reducer fixtures and helper protocol failure boundary | Omarchy agent connected but clipboard capability not announced; round-trip unavailable | BLOCKED-LIVE |
 | SPICE file transfer | Native async file-copy path, `src/transfer.ts`, `src/transfer.test.ts` | Path confinement, exact completion validation, native build | 46-byte confined fixture completed through disposable Omarchy SPICE transfer | VERIFIED for transport; destination semantics unverified |
 | Drag/drop | Native coordinator, `src/drag-drop.ts`, `src/drag-drop.test.ts` | State/evidence fixtures and cleanup path | Live transfer and pointer release observed; application acceptance remained `unknown` | IMPLEMENTED-UNVERIFIED-LIVE |
@@ -253,7 +253,7 @@ libvirt screenshot                      PASS on ubuntu24.04 and archlinux
 virsh send-key ESC                      PASS on ubuntu24.04 and archlinux
 QMP query-commands/query-mice           PASS on ubuntu24.04 and archlinux
 QMP normalized move                     PASS on ubuntu24.04 and archlinux (0.5, 0.5; backend=qmp)
-SPICE mouse                             PASS on archlinux via libvirt graphics FD; 1280x800, client mouse mode
+SPICE mouse                             PASS on archlinux via libvirt graphics FD; auto move, click, and scroll at 1280x800
 SPICE clipboard                         SKIPPED: guest agent does not announce clipboard capability
 SPICE file transfer                     PASS on archlinux via real async SPICE copy; 46-byte confined fixture
 drag/drop                               PASS for transfer and pointer release; application acceptance=unknown
