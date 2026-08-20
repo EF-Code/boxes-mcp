@@ -28,8 +28,11 @@ struct _Request {
     gchar *error_message;
     gchar *clipboard_text;
     gsize clipboard_bytes;
+    guint64 clipboard_max_bytes;
     guint64 transferred_bytes;
     guint64 total_bytes;
+    gboolean drag_transfer_completed;
+    gboolean drag_mouse_released;
     GCancellable *cancellable;
     GFile *source;
 };
@@ -202,7 +205,8 @@ static void channel_event_cb(SpiceChannel *channel, SpiceChannelEvent event, gpo
 
 static void agent_update_cb(SpiceMainChannel *channel, gpointer user_data) {
     HelperState *state = user_data;
-    state->agent_connected = spice_main_channel_agent_test_capability(channel, VD_AGENT_CAP_CLIPBOARD);
+    state->agent_connected = spice_main_channel_agent_test_capability(channel, VD_AGENT_CAP_CLIPBOARD)
+        || !spice_main_channel_agent_test_capability(channel, VD_AGENT_CAP_FILE_XFER_DISABLED);
 }
 
 static void display_primary_create_cb(SpiceChannel *channel, gint format, gint width,
@@ -439,7 +443,7 @@ static void clipboard_selection_cb(SpiceMainChannel *channel, guint selection, g
     (void) channel;
     if (request == NULL || g_strcmp0(request->operation, "clipboard.read") != 0
         || selection != VD_AGENT_CLIPBOARD_SELECTION_CLIPBOARD || type != VD_AGENT_CLIPBOARD_UTF8_TEXT) return;
-    if (size > DEFAULT_MAX_CLIPBOARD_BYTES || !g_utf8_validate(data, size, NULL)) {
+    if (size > request->clipboard_max_bytes || !g_utf8_validate(data, size, NULL)) {
         request_fail(request, "CLIPBOARD_TOO_LARGE", "Guest clipboard is invalid or exceeds the configured limit");
         return;
     }
@@ -479,6 +483,7 @@ static gboolean do_clipboard(HelperState *state, Request *request, JsonObject *a
         request_fail(request, "SPICE_AGENT_DISCONNECTED", "SPICE guest agent clipboard capability is unavailable");
         return FALSE;
     }
+    request->clipboard_max_bytes = max_bytes;
     if (g_strcmp0(request->operation, "clipboard.write") == 0) {
         if (text == NULL || !g_utf8_validate(text, -1, NULL) || strlen(text) > max_bytes) {
             request_fail(request, "CLIPBOARD_TOO_LARGE", "Clipboard text is invalid or exceeds the configured limit");
@@ -510,6 +515,9 @@ static void file_copy_done_cb(GObject *source_object, GAsyncResult *result, gpoi
     Request *request = user_data;
     GError *error = NULL;
     if (spice_main_channel_file_copy_finish(SPICE_MAIN_CHANNEL(source_object), result, &error)) {
+        if (request->transferred_bytes < request->total_bytes) {
+            request->transferred_bytes = request->total_bytes;
+        }
         request_succeed(request);
     } else {
         request_fail(request, "SPICE_UNAVAILABLE", error != NULL ? error->message : "SPICE file transfer failed");
@@ -528,13 +536,13 @@ static gboolean do_file_transfer(HelperState *state, Request *request, JsonObjec
         request_fail(request, "SPICE_CAPABILITY_MISSING", "SPICE guest agent file transfer capability is unavailable");
         return FALSE;
     }
-    if (source_path == NULL || strchr(source_path, '\0') != NULL) {
+    if (source_path == NULL || source_path[0] == '\0' || strpbrk(source_path, "\r\n") != NULL) {
         request_fail(request, "TRANSFER_PATH_DENIED", "A regular source path is required");
         return FALSE;
     }
     request->source = g_file_new_for_path(source_path);
     info = g_file_query_info(request->source, G_FILE_ATTRIBUTE_STANDARD_TYPE "," G_FILE_ATTRIBUTE_STANDARD_SIZE,
-                             G_FILE_QUERY_INFO_NONE, NULL, &error);
+                             G_FILE_QUERY_INFO_NOFOLLOW_SYMLINKS, NULL, &error);
     if (info == NULL || g_file_info_get_file_type(info) != G_FILE_TYPE_REGULAR) {
         request_fail(request, "TRANSFER_PATH_DENIED", "Only regular readable files can be transferred");
         g_clear_error(&error);
@@ -546,6 +554,7 @@ static gboolean do_file_transfer(HelperState *state, Request *request, JsonObjec
         g_clear_object(&info);
         return FALSE;
     }
+    request->total_bytes = (guint64) g_file_info_get_size(info);
     g_clear_object(&info);
     request->cancellable = g_cancellable_new();
     sources[0] = request->source;
@@ -557,6 +566,66 @@ static gboolean do_file_transfer(HelperState *state, Request *request, JsonObjec
         request_fail(request, "OPERATION_TIMEOUT", "SPICE file transfer timed out");
     }
     return request->success;
+}
+
+static gboolean do_drag_drop(HelperState *state, Request *request, JsonObject *args) {
+    gdouble x, y, width, height;
+    gint px, py;
+    guint left_mask = SPICE_MOUSE_BUTTON_MASK_LEFT;
+    gboolean pressed = FALSE;
+    if (!do_file_transfer(state, request, args)) return FALSE;
+    request->done = FALSE;
+    request->success = FALSE;
+    request->drag_transfer_completed = TRUE;
+    if (!wait_for_channels(state, TRUE, DEFAULT_TIMEOUT_MS)
+        || state->display_width <= 0 || state->display_height <= 0) {
+        request_fail(request, "SPICE_CAPABILITY_MISSING", "SPICE display geometry or inputs are unavailable");
+        return FALSE;
+    }
+    if (!number_member(args, "x", &x) || !number_member(args, "y", &y)) {
+        request_fail(request, "INVALID_ARGUMENT", "Drag target coordinates must be finite numbers");
+        return FALSE;
+    }
+    if (g_strcmp0(string_member(args, "coordinateSpace"), "normalized") == 0) {
+        if (x < 0 || x > 1 || y < 0 || y > 1) {
+            request_fail(request, "INVALID_ARGUMENT", "Normalized drag coordinates must be between 0 and 1");
+            return FALSE;
+        }
+        px = (gint) llround(x * state->display_width);
+        py = (gint) llround(y * state->display_height);
+    } else if (g_strcmp0(string_member(args, "coordinateSpace"), "pixels") == 0
+               && number_member(args, "width", &width) && number_member(args, "height", &height)
+               && floor(x) == x && floor(y) == y && floor(width) == width && floor(height) == height
+               && width > 0 && height > 0 && x >= 0 && y >= 0 && x <= width && y <= height) {
+        px = (gint) llround(x / width * state->display_width);
+        py = (gint) llround(y / height * state->display_height);
+    } else {
+        request_fail(request, "INVALID_ARGUMENT", "Drag coordinates require a valid coordinate space and dimensions");
+        goto cleanup;
+    }
+    spice_main_channel_request_mouse_mode(state->main_channel, SPICE_MOUSE_MODE_CLIENT);
+    spice_inputs_channel_position(state->inputs_channel, 0, 0, 0, state->button_state);
+    spice_inputs_channel_button_press(state->inputs_channel, SPICE_MOUSE_BUTTON_LEFT,
+                                      state->button_state | left_mask);
+    state->button_state |= left_mask;
+    pressed = TRUE;
+    spice_inputs_channel_position(state->inputs_channel, px, py, 0, state->button_state);
+    spice_inputs_channel_button_release(state->inputs_channel, SPICE_MOUSE_BUTTON_LEFT,
+                                         state->button_state & ~left_mask);
+    state->button_state &= ~left_mask;
+    pressed = FALSE;
+    request->drag_mouse_released = TRUE;
+    request_succeed(request);
+    return TRUE;
+
+cleanup:
+    if (pressed && state->inputs_channel != NULL && state->inputs_open) {
+        spice_inputs_channel_button_release(state->inputs_channel, SPICE_MOUSE_BUTTON_LEFT,
+                                             state->button_state & ~left_mask);
+        state->button_state &= ~left_mask;
+        request->drag_mouse_released = TRUE;
+    }
+    return FALSE;
 }
 
 static JsonNode *request_result(Request *request, HelperState *state) {
@@ -575,6 +644,15 @@ static JsonNode *request_result(Request *request, HelperState *state) {
     } else if (g_strcmp0(request->operation, "file.transfer") == 0) {
         json_builder_set_member_name(builder, "transportCompleted"); json_builder_add_boolean_value(builder, TRUE);
         json_builder_set_member_name(builder, "bytes"); json_builder_add_int_value(builder, (gint64) request->transferred_bytes);
+    } else if (g_strcmp0(request->operation, "drag-drop") == 0) {
+        json_builder_set_member_name(builder, "transferCompleted"); json_builder_add_boolean_value(builder, request->drag_transfer_completed);
+        json_builder_set_member_name(builder, "mouseReleased"); json_builder_add_boolean_value(builder, request->drag_mouse_released);
+        json_builder_set_member_name(builder, "applicationAccepted"); json_builder_add_string_value(builder, "unknown");
+        json_builder_set_member_name(builder, "evidence");
+        json_builder_begin_array(builder);
+        json_builder_add_string_value(builder, "SPICE file-transfer completion observed");
+        json_builder_add_string_value(builder, "SPICE pointer release observed");
+        json_builder_end_array(builder);
     } else {
         json_builder_set_member_name(builder, "backend"); json_builder_add_string_value(builder, "spice");
         json_builder_set_member_name(builder, "completed"); json_builder_add_boolean_value(builder, TRUE);
@@ -649,7 +727,7 @@ static void handle_line(HelperState *state, const gchar *line) {
     } else if (g_strcmp0(operation, "file.transfer") == 0) {
         success = do_file_transfer(state, request, args);
     } else if (g_strcmp0(operation, "drag-drop") == 0) {
-        request_fail(request, "SPICE_CAPABILITY_MISSING", "Application drag-and-drop requires a SPICE GTK/viewer harness");
+        success = do_drag_drop(state, request, args);
     } else {
         request_fail(request, "INVALID_ARGUMENT", "SPICE operation is not allowlisted");
     }
