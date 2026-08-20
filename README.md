@@ -13,6 +13,8 @@ A lightweight Model Context Protocol (MCP) server that enables Claude Code to ma
 - 🔍 **VM Discovery** - List and inspect all VMs with detailed information
 - 🔒 **Safe Operations** - Storage preservation by default, no destructive actions
 - 🎯 **GNOME Boxes Compatible** - Works seamlessly with GNOME Boxes VMs
+- 🖱️ **Controlled Interaction** - Screenshot, allowlisted keyboard, and typed mouse tools
+- 🔌 **Capability-Gated SPICE** - Optional helper protocol for SPICE input, clipboard, and transfer
 - ⚡ **Fast & Lightweight** - Minimal overhead, direct virsh integration
 
 ## Quick Start
@@ -23,6 +25,12 @@ A lightweight Model Context Protocol (MCP) server that enables Claude Code to ma
 - libvirt-daemon-system, qemu-kvm installed
 - Node.js 18+ and npm
 - User in `libvirt` and `kvm` groups
+- `virsh` available on `PATH` for lifecycle, screenshot, keyboard, and QMP fallback operations
+
+SPICE-backed tools additionally require a SPICE display, a guest virtio-serial agent
+channel, and a running `spice-vdagent` (or equivalent guest agent). The repository
+does not bundle a SPICE helper executable; set `BOXES_SPICE_HELPER` only to a reviewed
+companion process that implements the versioned stdio protocol described below.
 
 ```bash
 # Install dependencies
@@ -61,7 +69,8 @@ Add to your Claude Code config (`~/.claude/config.json`):
       "command": "node",
       "args": ["/absolute/path/to/boxes-mcp/dist/src/index.js"],
       "env": {
-        "LIBVIRT_URI": "qemu:///system"
+        "LIBVIRT_URI": "qemu:///system",
+        "BOXES_INPUT_BACKEND": "auto"
       }
     }
   }
@@ -93,6 +102,38 @@ Add to your Claude Code config (`~/.claude/config.json`):
 | `boxes.snapshots.revert` | Revert to snapshot | `nameOrUuid: string, snapshot: string` |
 | `boxes.snapshots.delete` | Delete snapshot | `nameOrUuid: string, snapshot: string` |
 
+### Display and interaction
+
+| Tool | Description | Parameters |
+|------|-------------|------------|
+| `boxes.screenshot` | Capture a running domain display as MCP image content | `nameOrUuid, screen?: number, backend?: auto|libvirt` |
+| `boxes.keyboard` | Send a bounded allowlisted Linux key sequence through virsh | `nameOrUuid, keys: string[], holdMs?: number` |
+| `boxes.mouse` | Send typed move/button/click/scroll input | `nameOrUuid, action, x, y, coordinateSpace?, button?, width?, height?, deltaX?, deltaY?, backend?` |
+| `boxes.clipboard` | Explicit UTF-8 clipboard read/write through the SPICE helper | `nameOrUuid, operation, selection?, text?` |
+| `boxes.drag_drop` | Experimental confined file transfer plus mouse sequence | `nameOrUuid, sourcePath, x, y, coordinateSpace?, width?, height?, timeoutMs?` |
+
+Interaction tools never accept shell fragments, raw QMP JSON, arbitrary virsh
+flags, guest commands, or arbitrary transfer destinations. New operations require
+a running domain and return a stable capability/error code when their backend is
+not available.
+
+### Optional environment variables
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `LIBVIRT_URI` | `qemu:///system` | Libvirt connection used by every domain operation |
+| `BOXES_INPUT_BACKEND` | `auto` | Default mouse backend preference: `auto`, `spice`, or `qmp` |
+| `BOXES_SPICE_HELPER` | unset | Explicit executable implementing the versioned SPICE helper protocol |
+| `BOXES_SPICE_OPERATION_TIMEOUT_MS` | `30000` | Maximum one helper request duration |
+| `BOXES_ARTIFACT_DIR` | process temp directory | Controlled parent directory for temporary screenshots |
+| `BOXES_MAX_SCREENSHOT_BYTES` | `20971520` | Screenshot payload limit |
+| `BOXES_TRANSFER_ROOT` | unset | Required canonical host root for drag/drop source files |
+| `BOXES_MAX_TRANSFER_BYTES` | `104857600` | Transfer source size limit |
+| `BOXES_MAX_CLIPBOARD_BYTES` | `1048576` | UTF-8 clipboard payload limit |
+
+`BOXES_TRANSFER_ROOT` is deliberately required rather than inferred. Paths are
+canonicalized and symlink escapes, directories, and special files are rejected.
+
 ## Usage Examples
 
 ### With Claude Code
@@ -123,8 +164,17 @@ LIBVIRT_URI=qemu:///system node dist/src/index.js
 boxes-mcp/
 ├── src/
 │   ├── index.ts          # MCP server entry point
+│   ├── tools.ts          # Side-effect-free tool registry and handler boundary
 │   ├── libvirt.ts        # virsh operations & parsers
+│   ├── virsh.ts          # Shared executable and libvirt URI arguments
 │   ├── exec.ts           # Safe command execution
+│   ├── screenshot.ts     # Controlled libvirt screenshot capture
+│   ├── keyboard.ts       # Allowlisted virsh send-key adapter
+│   ├── mouse.ts/qmp.ts   # Typed mouse actions and QMP fallback
+│   ├── spice.ts          # Versioned companion-helper protocol client
+│   ├── clipboard.ts      # Explicit SPICE clipboard orchestration
+│   ├── transfer.ts       # Confined host-file validation
+│   ├── drag-drop.ts      # Experimental transfer/input coordination
 │   ├── *.test.ts         # Unit tests
 ├── systemd/
 │   └── boxes-mcp.service # Systemd user service
@@ -148,11 +198,17 @@ npm run test:watch
 npm run test:coverage
 ```
 
-**Test Coverage**: 33 tests, 100% passing
+**Test Coverage**: 55 tests, 100% passing
 
 - `exec.ts`: 100% statements
 - `libvirt.ts`: 81.3% statements, 92.85% branches
-- Comprehensive unit and integration tests
+- Interaction validation, command construction, QMP response mapping, artifact cleanup,
+  helper framing, capability discovery, and path-confinement tests
+
+The default suite is mocked/local: it does not prove that QMP, SPICE, clipboard,
+or drag-and-drop works against a real VM. Live tests must be opt-in and target a
+specifically named disposable VM with snapshots; no arbitrary first-listed domain
+is ever selected by the interaction tools.
 
 ### Building
 
@@ -181,10 +237,50 @@ journalctl --user -fu boxes-mcp
 
 - ✅ **Sandboxed Execution**: Uses Node.js `execFile` with timeout and buffer limits
 - ✅ **No Arbitrary Commands**: Only predefined virsh operations allowed
+- ✅ **Typed Input Boundary**: QMP commands and SPICE operations are internal enums with validated arguments
+- ✅ **Bounded Payloads**: Key counts, hold durations, coordinates, scroll deltas, screenshots, clipboard, and transfers are capped
+- ✅ **Path Confinement**: Drag/drop sources must remain beneath `BOXES_TRANSFER_ROOT` after canonicalization
 - ✅ **Storage Preservation**: VM storage not deleted by default
 - ✅ **LIBVIRT_URI Isolation**: Respects environment-specified libvirt connection
 - ⚠️ **Permissions Required**: User must have libvirt group membership
 - ⚠️ **Network Exposure**: Not designed for remote access without additional security
+- ⚠️ **Expanded Control Surface**: Screenshots and guest clipboard data are untrusted; keep the MCP server on local stdio
+- ⚠️ **SPICE Helper Trust**: The helper executable is an explicit host dependency and must not log credentials, clipboard contents, or file contents
+
+### SPICE helper protocol
+
+The TypeScript server sends one compact JSON request per helper process invocation
+over stdin and expects one version-1 JSON response on stdout. The helper is only
+called with an explicit executable path and no caller-controlled arguments. The
+request envelope is shaped like:
+
+```json
+{
+  "version": 1,
+  "id": "request-123",
+  "operation": "clipboard.read",
+  "domain": "guest-name",
+  "display": { "uri": "spice://127.0.0.1:5900" },
+  "arguments": { "selection": "clipboard", "maxBytes": 1048576 }
+}
+```
+
+Supported operation names are internal (`mouse`, `clipboard.read`,
+`clipboard.write`, and `drag-drop`). A helper error is mapped to a stable MCP
+error such as `SPICE_AGENT_DISCONNECTED`, `SPICE_CAPABILITY_MISSING`, or
+`SPICE_UNAVAILABLE`. No helper executable is configured or live SPICE boundary
+verified by the repository's default tests.
+
+### Capability matrix
+
+| Capability | Libvirt/virsh | QMP fallback | SPICE helper |
+|------------|---------------|--------------|--------------|
+| Screenshot | Implemented via `virsh screenshot` | Not used | Adapter reserved, unavailable without helper |
+| Keyboard | Implemented via allowlisted `virsh send-key` | Not used | Not used |
+| Mouse | Not used | Implemented via typed `input-send-event` | Preferred by `auto` when configured |
+| Clipboard | Not available | Not available | Requires SPICE agent and helper; not live-verified |
+| File transfer | Not available | Not available | Requires SPICE agent and helper; not live-verified |
+| Drag-and-drop | Not available | Not available | Experimental; application acceptance not verified |
 
 ## Troubleshooting
 
