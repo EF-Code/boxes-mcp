@@ -3,6 +3,7 @@ import { displayEndpoint, parseDomainDisplayCapabilities, type DisplayEndpoint, 
 import { probeQmp } from "./qmp.js";
 import { spiceHelperConfigured, spiceHelperStatus } from "./spice.js";
 import { domainXml, requireRunningDomain } from "./libvirt.js";
+import { requireNameOrUuid } from "./validation.js";
 
 export type CapabilityState =
   | "unconfigured"
@@ -36,6 +37,7 @@ export async function discoverCapabilities(
   nameOrUuid: string,
   options: { probeQmp?: boolean; probeSpice?: boolean } = {}
 ): Promise<DomainCapabilities> {
+  nameOrUuid = requireNameOrUuid({ nameOrUuid });
   await requireRunningDomain(nameOrUuid);
   let display: DisplayEndpoint | undefined;
   try {

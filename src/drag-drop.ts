@@ -1,6 +1,7 @@
 import { BoxesError } from "./errors.js";
 import { displayEndpoint } from "./display.js";
 import { callSpiceHelper, spiceHelperStatus } from "./spice.js";
+import { captureScreenshot } from "./screenshot.js";
 import { parseCoordinates, asRecord, boundedInteger, requireNameOrUuid } from "./validation.js";
 import { validateTransferSource, type TransferSource } from "./transfer.js";
 import { requireRunningDomain } from "./libvirt.js";
@@ -43,26 +44,29 @@ export function initialDragState(): DragState {
 
 /** Pure coordinator for transfer, pointer cleanup, and application evidence. */
 export function reduceDragState(state: DragState, event: DragEvent): DragState {
+  if ((state.phase === "failed" || state.phase === "cancelled") && event.type === "released") {
+    return { ...state, mouseReleased: true, evidence: event.evidence ? [...state.evidence, event.evidence] : state.evidence };
+  }
   if (state.phase === "complete" || state.phase === "failed" || state.phase === "cancelled") return state;
   if (event.type === "failed") return { ...state, phase: "failed" };
   if (event.type === "cancelled") return { ...state, phase: "cancelled" };
   if (event.type === "preflight-ready") return { ...state, phase: "preflight" };
-  if (event.type === "transfer-started") return { ...state, phase: "transferring" };
-  if (event.type === "transfer-completed") return {
+  if (event.type === "transfer-started") return state.phase === "preflight" ? { ...state, phase: "transferring" } : state;
+  if (event.type === "transfer-completed" && state.phase === "transferring") return {
     ...state,
     phase: "transferring",
     transferCompleted: true,
     evidence: event.evidence ? [...state.evidence, event.evidence] : state.evidence
   };
-  if (event.type === "button-pressed") return { ...state, phase: "pressed" };
-  if (event.type === "moved") return { ...state, phase: "moving" };
-  if (event.type === "released") return {
+  if (event.type === "button-pressed" && state.transferCompleted && state.phase === "transferring") return { ...state, phase: "pressed" };
+  if (event.type === "moved" && (state.phase === "pressed" || state.phase === "moving")) return { ...state, phase: "moving" };
+  if (event.type === "released" && (state.phase === "pressed" || state.phase === "moving")) return {
     ...state,
     phase: "released",
     mouseReleased: true,
     evidence: event.evidence ? [...state.evidence, event.evidence] : state.evidence
   };
-  if (event.type === "application-accepted") return {
+  if (event.type === "application-accepted" && state.phase === "released") return {
     ...state,
     applicationAccepted: event.accepted,
     evidence: [...state.evidence, event.evidence],
@@ -131,10 +135,28 @@ export async function dragDrop(value: unknown): Promise<unknown> {
       timeoutMs: request.timeoutMs
     }
   });
+  let postActionScreenshot: { captured: boolean; mimeType?: string; width?: number; height?: number; errorCode?: string };
+  try {
+    const screenshot = await captureScreenshot({ nameOrUuid: request.nameOrUuid, screen: 0, backend: "libvirt" });
+    postActionScreenshot = {
+      captured: true,
+      mimeType: screenshot.mimeType,
+      width: screenshot.width,
+      height: screenshot.height
+    };
+  } catch (error) {
+    postActionScreenshot = {
+      captured: false,
+      errorCode: error instanceof BoxesError ? error.code : "BACKEND_UNAVAILABLE"
+    };
+  }
   return {
     ok: true,
     backend: "spice",
     source: { basename: source.basename, bytes: source.bytes },
-    result: validateDragResult(result)
+    result: {
+      ...validateDragResult(result),
+      postActionScreenshot
+    }
   };
 }

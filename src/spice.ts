@@ -101,6 +101,14 @@ export interface SpiceMouseResult {
   height: number;
 }
 
+function operationTimeoutMs(operation: SpiceOperation): number {
+  const configured = parseEnvironmentInteger("BOXES_SPICE_OPERATION_TIMEOUT_MS", 30_000, 100, 300_000);
+  const requested = "timeoutMs" in operation.arguments ? operation.arguments.timeoutMs : undefined;
+  return typeof requested === "number" && Number.isInteger(requested) && requested >= 1_000 && requested <= 120_000
+    ? requested
+    : configured;
+}
+
 function isObject(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
@@ -235,7 +243,7 @@ export class SpiceHelperClient {
     if (Buffer.byteLength(line, "utf8") > this.maxLineBytes) {
       throw new BoxesError("INVALID_ARGUMENT", "SPICE helper request exceeds the protocol frame limit");
     }
-    const timeoutMs = parseEnvironmentInteger("BOXES_SPICE_OPERATION_TIMEOUT_MS", 30_000, 100, 300_000);
+    const timeoutMs = operationTimeoutMs(operation);
 
     return await new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
@@ -311,7 +319,15 @@ export class SpiceHelperClient {
       this.failChild(responseError("SPICE helper returned an invalid response envelope"));
       return;
     }
-    if (response.event === "progress") return;
+    if (response.event === "progress") {
+      const progress = response.progress;
+      if (!progress || typeof progress.bytes !== "number" || !Number.isInteger(progress.bytes) || progress.bytes < 0
+        || typeof progress.totalBytes !== "number" || !Number.isInteger(progress.totalBytes)
+        || progress.totalBytes < 0 || progress.bytes > progress.totalBytes) {
+        this.failChild(responseError("SPICE helper returned invalid progress data"));
+      }
+      return;
+    }
     if (typeof response.ok !== "boolean") {
       this.failChild(responseError("SPICE helper returned an invalid response envelope"));
       return;

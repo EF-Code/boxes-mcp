@@ -40,5 +40,17 @@ describe("drag/drop contract", () => {
     let state = reduceDragState(initialDragState(), { type: "button-pressed" });
     state = reduceDragState(state, { type: "failed" });
     expect(state).toMatchObject({ phase: "failed", mouseReleased: false });
+    state = reduceDragState(state, { type: "released", evidence: "finally cleanup" });
+    expect(state).toMatchObject({ phase: "failed", mouseReleased: true });
+  });
+
+  it("ignores out-of-order transfer and pointer events", () => {
+    let state = initialDragState();
+    state = reduceDragState(state, { type: "button-pressed" });
+    expect(state.phase).toBe("preflight");
+    state = reduceDragState(state, { type: "preflight-ready" });
+    state = reduceDragState(state, { type: "transfer-started" });
+    state = reduceDragState(state, { type: "button-pressed" });
+    expect(state.phase).toBe("transferring");
   });
 });

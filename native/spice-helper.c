@@ -477,6 +477,7 @@ static gboolean clipboard_request_cb(SpiceMainChannel *channel, guint selection,
 static gboolean do_clipboard(HelperState *state, Request *request, JsonObject *args) {
     const gchar *text = string_member(args, "text");
     guint64 max_bytes = bounded_member(args, "maxBytes", DEFAULT_MAX_CLIPBOARD_BYTES, 100u * 1024u * 1024u);
+    guint64 timeout_ms = bounded_member(args, "timeoutMs", DEFAULT_TIMEOUT_MS, 120000u);
     guint32 type = VD_AGENT_CLIPBOARD_UTF8_TEXT;
     if (!wait_for_channels(state, FALSE, DEFAULT_TIMEOUT_MS) || state->main_channel == NULL
         || !spice_main_channel_agent_test_capability(state->main_channel, VD_AGENT_CAP_CLIPBOARD)) {
@@ -496,7 +497,7 @@ static gboolean do_clipboard(HelperState *state, Request *request, JsonObject *a
     } else {
         /* The grab and request callbacks complete the actual guest-to-host flow. */
     }
-    pump_for(state, DEFAULT_TIMEOUT_MS);
+    pump_for(state, (guint) timeout_ms);
     if (!request->done) request_fail(request, "SPICE_AGENT_DISCONNECTED", "Guest clipboard did not complete");
     if (g_strcmp0(request->operation, "clipboard.write") == 0) {
         spice_main_channel_clipboard_selection_release(state->main_channel, VD_AGENT_CLIPBOARD_SELECTION_CLIPBOARD);
@@ -528,6 +529,7 @@ static void file_copy_done_cb(GObject *source_object, GAsyncResult *result, gpoi
 static gboolean do_file_transfer(HelperState *state, Request *request, JsonObject *args) {
     const gchar *source_path = string_member(args, "sourcePath");
     guint64 max_bytes = bounded_member(args, "maxBytes", DEFAULT_MAX_TRANSFER_BYTES, 10ull * 1024ull * 1024ull * 1024ull);
+    guint64 timeout_ms = bounded_member(args, "timeoutMs", DEFAULT_TIMEOUT_MS, 120000u);
     GFile *sources[2] = { NULL, NULL };
     GFileInfo *info;
     GError *error = NULL;
@@ -560,7 +562,7 @@ static gboolean do_file_transfer(HelperState *state, Request *request, JsonObjec
     sources[0] = request->source;
     spice_main_channel_file_copy_async(state->main_channel, sources, G_FILE_COPY_NONE, request->cancellable,
                                        file_progress_cb, request, file_copy_done_cb, request);
-    pump_for(state, DEFAULT_TIMEOUT_MS);
+    pump_for(state, (guint) timeout_ms);
     if (!request->done) {
         g_cancellable_cancel(request->cancellable);
         request_fail(request, "OPERATION_TIMEOUT", "SPICE file transfer timed out");

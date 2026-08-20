@@ -1,7 +1,7 @@
 import { BoxesError } from "./errors.js";
 import { sh } from "./exec.js";
 import { VIRSH, commonArgs } from "./virsh.js";
-import { normalizedCoordinate } from "./validation.js";
+import { normalizedCoordinate, requireNameOrUuid } from "./validation.js";
 
 export type QmpButton = "left" | "middle" | "right" | "wheel-up" | "wheel-down" | "wheel-left" | "wheel-right";
 
@@ -42,13 +42,14 @@ export async function qmpExecute(
   execute: "query-commands" | "query-mice" | "input-send-event",
   argumentsValue: Record<string, unknown> = {}
 ): Promise<unknown> {
+  const validatedName = requireNameOrUuid({ nameOrUuid });
   const request = JSON.stringify({ execute, arguments: argumentsValue });
   let stdout: string;
   try {
     ({ stdout } = await sh(VIRSH, [
       ...commonArgs(),
       "qemu-monitor-command",
-      nameOrUuid,
+      validatedName,
       "--pretty",
       request
     ]));

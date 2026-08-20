@@ -70,4 +70,9 @@ describe("capability discovery", () => {
       }
     });
   });
+
+  it("rejects an invalid domain argument before probing libvirt", async () => {
+    await expect(discoverCapabilities("-vm")).rejects.toMatchObject({ code: "INVALID_ARGUMENT" });
+    expect(libvirt.requireRunningDomain).not.toHaveBeenCalled();
+  });
 });

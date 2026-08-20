@@ -39,6 +39,11 @@ describe("QMP adapter", () => {
     await expect(qmpExecute("vm", "query-mice")).rejects.toMatchObject({ code: "QMP_UNAVAILABLE" });
   });
 
+  it("rejects monitor domain names that could become virsh options", async () => {
+    await expect(qmpExecute("-vm", "query-mice")).rejects.toMatchObject({ code: "INVALID_ARGUMENT" });
+    expect(vi.mocked(exec.sh)).not.toHaveBeenCalled();
+  });
+
   it("requires an absolute pointer and bounds event batches", async () => {
     vi.mocked(exec.sh)
       .mockResolvedValueOnce({ stdout: '{"return":[{"name":"input-send-event"}]}', stderr: "" })

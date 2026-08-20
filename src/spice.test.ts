@@ -127,6 +127,22 @@ done
     client.close();
   });
 
+  it("rejects malformed progress events instead of treating them as completion", async () => {
+    tempDirectory = await mkdtemp(join("/tmp", "boxes-mcp-spice-test-"));
+    const helper = join(tempDirectory, "progress.sh");
+    await writeFile(helper, `#!/bin/sh
+IFS= read -r request
+id=$(printf '%s' "$request" | sed -n 's/.*"id":"\\([^\"]*\\)".*/\\1/p')
+printf '{"version":1,"id":"%s","event":"progress","progress":{"bytes":2,"totalBytes":1}}\\n' "$id"
+`);
+    await chmod(helper, 0o700);
+    process.env.BOXES_SPICE_HELPER = helper;
+    await expect(callSpiceHelper({
+      operation: "status", domain: "vm",
+      display: { display: "spice://127.0.0.1:5900", protocol: "spice" }, arguments: {}
+    })).rejects.toMatchObject({ code: "SPICE_UNAVAILABLE" });
+  });
+
   it("validates the typed status result", () => {
     expect(parseSpiceStatus({
       mainChannel: "connected", inputsChannel: "connected", displayChannel: "disconnected",
