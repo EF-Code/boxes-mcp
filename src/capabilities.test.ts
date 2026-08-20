@@ -10,7 +10,7 @@ vi.mock("./libvirt.js", () => ({
   domainXml: vi.fn()
 }));
 vi.mock("./qmp.js", () => ({ probeQmp: vi.fn() }));
-vi.mock("./spice.js", () => ({ spiceHelperConfigured: vi.fn() }));
+vi.mock("./spice.js", () => ({ spiceHelperConfigured: vi.fn(), spiceHelperStatus: vi.fn() }));
 
 describe("capability discovery", () => {
   beforeEach(() => {
@@ -24,6 +24,11 @@ describe("capability discovery", () => {
         <input type='tablet' bus='usb'/>
       </devices></domain>`);
     vi.mocked(spice.spiceHelperConfigured).mockReturnValue(true);
+    vi.mocked(spice.spiceHelperStatus).mockResolvedValue({
+      mainChannel: "connected", inputsChannel: "connected", displayChannel: "connected",
+      agentConnected: true, clipboard: true, fileTransfer: true, mouseMode: 2,
+      geometryKnown: true, width: 1024, height: 768
+    });
   });
 
   it("reports structured display and helper-backed capabilities", async () => {

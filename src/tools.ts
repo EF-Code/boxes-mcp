@@ -136,7 +136,8 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       additionalProperties: false,
       properties: {
         nameOrUuid: domainProperty,
-        probeQmp: { type: "boolean", default: false }
+        probeQmp: { type: "boolean", default: false },
+        probeSpice: { type: "boolean", default: false }
       },
       required: ["nameOrUuid"]
     }
@@ -277,8 +278,11 @@ export async function handleTool(name: string, args: unknown): Promise<ToolResul
       }
       case "boxes.display": return textResult(await displayAddress((args as { nameOrUuid: string }).nameOrUuid));
       case "boxes.capabilities": {
-        const request = args as { nameOrUuid: string; probeQmp?: boolean };
-        return textResult(await discoverCapabilities(request.nameOrUuid, { probeQmp: request.probeQmp ?? false }));
+        const request = args as { nameOrUuid: string; probeQmp?: boolean; probeSpice?: boolean };
+        return textResult(await discoverCapabilities(request.nameOrUuid, {
+          probeQmp: request.probeQmp ?? false,
+          probeSpice: request.probeSpice ?? false
+        }));
       }
       case "boxes.screenshot": {
         const result = await captureScreenshot(args);

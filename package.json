@@ -10,6 +10,7 @@
     "start": "node dist/src/index.js",
     "dev": "node --watch dist/src/index.js",
     "compile": "tsc -p .",
+    "build:spice-helper": "make -C native",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage"

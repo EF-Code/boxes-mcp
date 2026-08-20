@@ -3,7 +3,7 @@ import { parseCoordinates, asRecord, boundedInteger, enumValue, requireNameOrUui
 import { absoluteCoordinate, pixelCoordinate, probeQmp, sendQmpInput, type QmpButton, type QmpInputEvent } from "./qmp.js";
 import { requireRunningDomain } from "./libvirt.js";
 import { displayEndpoint } from "./display.js";
-import { callSpiceHelper, spiceHelperConfigured } from "./spice.js";
+import { callSpiceHelper, spiceHelperConfigured, spiceHelperStatus } from "./spice.js";
 
 export type MouseAction = "move" | "click" | "scroll";
 export type MouseBackend = "auto" | "qmp" | "spice";
@@ -101,8 +101,17 @@ export async function sendMouse(value: unknown): Promise<Record<string, unknown>
     if (request.backend === "spice" || !(error instanceof BoxesError) || error.code !== "UNSUPPORTED_DISPLAY") throw error;
   }
 
-  if (request.backend === "spice") {
-    if (endpoint?.protocol === "spice" && spiceHelperConfigured()) {
+  if (request.backend === "spice" || (request.backend === "auto" && endpoint?.protocol === "spice" && spiceHelperConfigured())) {
+    let spiceReady = request.backend === "spice";
+    if (!spiceReady && endpoint) {
+      try {
+        const status = await spiceHelperStatus(request.nameOrUuid, endpoint);
+        spiceReady = status.mainChannel === "connected" && status.inputsChannel === "connected" && status.displayChannel === "connected";
+      } catch {
+        spiceReady = false;
+      }
+    }
+    if (spiceReady && endpoint?.protocol === "spice" && spiceHelperConfigured()) {
       await callSpiceHelper({
         operation: "mouse",
         domain: request.nameOrUuid,
@@ -131,8 +140,10 @@ export async function sendMouse(value: unknown): Promise<Record<string, unknown>
         deltaY: request.deltaY
       };
     }
-    if (endpoint?.protocol !== "spice") throw new BoxesError("UNSUPPORTED_DISPLAY", "SPICE mouse input requires a SPICE display");
-    throw new BoxesError("SPICE_UNAVAILABLE", "BOXES_SPICE_HELPER is not configured or executable");
+    if (request.backend === "spice") {
+      if (endpoint?.protocol !== "spice") throw new BoxesError("UNSUPPORTED_DISPLAY", "SPICE mouse input requires a SPICE display");
+      throw new BoxesError("SPICE_UNAVAILABLE", "SPICE inputs channel is not connected");
+    }
   }
 
   // Auto remains QMP until the persistent helper can prove an active SPICE inputs channel.

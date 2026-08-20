@@ -1,7 +1,7 @@
 import { BoxesError } from "./errors.js";
 import { displayEndpoint, parseDomainDisplayCapabilities, type DisplayEndpoint, type DomainDisplayCapabilities } from "./display.js";
 import { probeQmp } from "./qmp.js";
-import { spiceHelperConfigured } from "./spice.js";
+import { spiceHelperConfigured, spiceHelperStatus } from "./spice.js";
 import { domainXml, requireRunningDomain } from "./libvirt.js";
 
 export type CapabilityState =
@@ -34,7 +34,7 @@ export interface DomainCapabilities {
 /** Resolve backend capabilities without exposing monitor paths or credentials. */
 export async function discoverCapabilities(
   nameOrUuid: string,
-  options: { probeQmp?: boolean } = {}
+  options: { probeQmp?: boolean; probeSpice?: boolean } = {}
 ): Promise<DomainCapabilities> {
   await requireRunningDomain(nameOrUuid);
   let display: DisplayEndpoint | undefined;
@@ -52,6 +52,20 @@ export async function discoverCapabilities(
   }
 
   const spiceConfigured = display?.protocol === "spice" && spiceHelperConfigured();
+  let spiceStatus;
+  if (options.probeSpice && spiceConfigured && display) {
+    try {
+      spiceStatus = await spiceHelperStatus(nameOrUuid, display);
+    } catch (error) {
+      if (error instanceof BoxesError && error.code === "SPICE_AGENT_DISCONNECTED") {
+        spiceStatus = undefined;
+      } else if (error instanceof BoxesError && error.code === "SPICE_UNAVAILABLE") {
+        spiceStatus = undefined;
+      } else {
+        throw error;
+      }
+    }
+  }
   let qmp: CapabilityStatus = domain.domainType === "qemu" || domain.domainType === "kvm"
     ? { state: "configured" }
     : { state: "capability-missing", reason: "The active domain is not proven to be QEMU-backed" };
@@ -74,13 +88,19 @@ export async function discoverCapabilities(
     domain,
     backends: {
       qmp,
-      spice: spiceConfigured
+      spice: spiceStatus
+        ? { state: spiceStatus.mainChannel === "connected" && spiceStatus.displayChannel === "connected" && spiceStatus.inputsChannel === "connected" ? "connected" : "connecting" }
+        : spiceConfigured
         ? { state: "configured" }
         : { state: "unconfigured", reason: "A reviewed executable and SPICE display are required" },
-      clipboard: spiceConfigured && domain.hasSpiceAgentChannel
+      clipboard: spiceStatus
+        ? spiceStatus.clipboard ? { state: "connected" } : { state: "agent-disconnected", reason: "The SPICE guest agent does not announce clipboard capability" }
+        : spiceConfigured && domain.hasSpiceAgentChannel
         ? { state: "configured", reason: "Guest agent connection still requires SPICE status probing" }
         : { state: "capability-missing", reason: "SPICE helper and virtio SPICE agent channel are required" },
-      fileTransfer: spiceConfigured && domain.hasSpiceAgentChannel
+      fileTransfer: spiceStatus
+        ? spiceStatus.fileTransfer ? { state: "connected" } : { state: "capability-missing", reason: "The SPICE guest agent does not announce file transfer" }
+        : spiceConfigured && domain.hasSpiceAgentChannel
         ? { state: "configured", reason: "Guest agent connection still requires SPICE status probing" }
         : { state: "capability-missing", reason: "SPICE helper and virtio SPICE agent channel are required" }
     }

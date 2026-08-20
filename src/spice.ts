@@ -74,8 +74,62 @@ export interface SpiceHelperResponse {
   version: typeof SPICE_PROTOCOL_VERSION;
   id: string;
   ok: boolean;
+  event?: "progress";
+  progress?: { bytes?: number; totalBytes?: number };
   result?: unknown;
   error?: { code?: string; message?: string };
+}
+
+export interface SpiceStatusResult {
+  mainChannel: "connected" | "disconnected" | "connecting";
+  inputsChannel: "connected" | "disconnected" | "connecting";
+  displayChannel: "connected" | "disconnected" | "connecting";
+  agentConnected: boolean;
+  clipboard: boolean;
+  fileTransfer: boolean;
+  mouseMode: number;
+  geometryKnown: boolean;
+  width: number;
+  height: number;
+}
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+export function parseSpiceStatus(value: unknown): SpiceStatusResult {
+  if (!isObject(value)) throw new BoxesError("SPICE_UNAVAILABLE", "SPICE helper returned invalid status data");
+  const states = ["connected", "disconnected", "connecting"] as const;
+  const status = value as Record<string, unknown>;
+  const channel = (name: string): SpiceStatusResult["mainChannel"] => {
+    const candidate = status[name];
+    if (!states.includes(candidate as SpiceStatusResult["mainChannel"])) {
+      throw new BoxesError("SPICE_UNAVAILABLE", `SPICE helper returned invalid ${name} state`);
+    }
+    return candidate as SpiceStatusResult["mainChannel"];
+  };
+  const bool = (name: string): boolean => {
+    if (typeof status[name] !== "boolean") throw new BoxesError("SPICE_UNAVAILABLE", `SPICE helper returned invalid ${name}`);
+    return status[name] as boolean;
+  };
+  const integer = (name: string): number => {
+    if (typeof status[name] !== "number" || !Number.isInteger(status[name])) {
+      throw new BoxesError("SPICE_UNAVAILABLE", `SPICE helper returned invalid ${name}`);
+    }
+    return status[name] as number;
+  };
+  return {
+    mainChannel: channel("mainChannel"),
+    inputsChannel: channel("inputsChannel"),
+    displayChannel: channel("displayChannel"),
+    agentConnected: bool("agentConnected"),
+    clipboard: bool("clipboard"),
+    fileTransfer: bool("fileTransfer"),
+    mouseMode: integer("mouseMode"),
+    geometryKnown: bool("geometryKnown"),
+    width: integer("width"),
+    height: integer("height")
+  };
 }
 
 export function spiceHelperPath(): string | undefined {
@@ -229,7 +283,12 @@ export class SpiceHelperClient {
       this.failChild(responseError("SPICE helper returned invalid JSON", error));
       return;
     }
-    if (response.version !== SPICE_PROTOCOL_VERSION || typeof response.id !== "string" || typeof response.ok !== "boolean") {
+    if (response.version !== SPICE_PROTOCOL_VERSION || typeof response.id !== "string") {
+      this.failChild(responseError("SPICE helper returned an invalid response envelope"));
+      return;
+    }
+    if (response.event === "progress") return;
+    if (typeof response.ok !== "boolean") {
       this.failChild(responseError("SPICE helper returned an invalid response envelope"));
       return;
     }
@@ -274,6 +333,11 @@ function client(): SpiceHelperClient {
 
 export async function callSpiceHelper(operation: SpiceOperation): Promise<unknown> {
   return await client().request(operation);
+}
+
+export async function spiceHelperStatus(domain: string, display: DisplayEndpoint): Promise<SpiceStatusResult> {
+  const result = await callSpiceHelper({ operation: "status", domain, display, arguments: {} });
+  return parseSpiceStatus(result);
 }
 
 export function closeSpiceHelper(): void {

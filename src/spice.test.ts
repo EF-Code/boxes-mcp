@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { callSpiceHelper, closeSpiceHelper, SpiceHelperClient, spiceHelperConfigured } from "./spice.js";
+import { callSpiceHelper, closeSpiceHelper, parseSpiceStatus, SpiceHelperClient, spiceHelperConfigured } from "./spice.js";
 
 describe("SPICE helper boundary", () => {
   let tempDirectory: string | undefined;
@@ -125,5 +125,14 @@ done
       arguments: {}
     })).rejects.toMatchObject({ code: "SPICE_UNAVAILABLE" });
     client.close();
+  });
+
+  it("validates the typed status result", () => {
+    expect(parseSpiceStatus({
+      mainChannel: "connected", inputsChannel: "connected", displayChannel: "disconnected",
+      agentConnected: false, clipboard: false, fileTransfer: false, mouseMode: 1,
+      geometryKnown: false, width: 0, height: 0
+    })).toMatchObject({ displayChannel: "disconnected", geometryKnown: false });
+    expect(() => parseSpiceStatus({ mainChannel: "ready" })).toThrow(/invalid/);
   });
 });

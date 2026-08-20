@@ -11,6 +11,18 @@ export interface ClipboardRequest {
   text?: string;
 }
 
+function validateClipboardResult(value: unknown, maximum: number): { text: string; bytes: number } {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw new BoxesError("BACKEND_UNAVAILABLE", "SPICE helper returned an invalid clipboard result");
+  }
+  const result = value as { text?: unknown; bytes?: unknown };
+  if (typeof result.text !== "string" || typeof result.bytes !== "number" || !Number.isInteger(result.bytes)
+    || result.bytes !== Buffer.byteLength(result.text, "utf8") || result.bytes > maximum) {
+    throw new BoxesError("CLIPBOARD_TOO_LARGE", "SPICE helper returned invalid or oversized clipboard text");
+  }
+  return { text: result.text, bytes: result.bytes };
+}
+
 export function parseClipboardRequest(value: unknown): ClipboardRequest {
   const args = asRecord(value);
   const operation = enumValue(args.operation, "operation", ["read", "write"] as const);
@@ -41,5 +53,10 @@ export async function clipboard(value: unknown): Promise<unknown> {
       maxBytes
     }
   });
-  return { ok: true, backend: "spice", operation: request.operation, result };
+  return {
+    ok: true,
+    backend: "spice",
+    operation: request.operation,
+    result: request.operation === "read" ? validateClipboardResult(result, maxBytes) : result
+  };
 }
