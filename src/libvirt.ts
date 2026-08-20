@@ -1,4 +1,6 @@
 import { sh } from "./exec.js";
+import { VIRSH, commonArgs } from "./virsh.js";
+import { BoxesError } from "./errors.js";
 
 export type DomainState =
   | "running"
@@ -20,13 +22,6 @@ export interface SnapshotSummary {
   current: boolean;
   creationTime?: string;
   description?: string;
-}
-
-const VIRSH = "virsh";
-const DEFAULT_URI = process.env.LIBVIRT_URI || "qemu:///system";
-
-function commonArgs() {
-  return ["-c", DEFAULT_URI];
 }
 
 // Parse `virsh list --all` output
@@ -75,6 +70,19 @@ export async function domainInfo(nameOrUuid: string) {
     }
   }
   return info; // includes State, CPU(s), Max memory, Used memory, Autostart, etc.
+}
+
+export async function requireRunningDomain(nameOrUuid: string): Promise<Record<string, string>> {
+  let info: Record<string, string>;
+  try {
+    info = await domainInfo(nameOrUuid);
+  } catch (error) {
+    throw new BoxesError("DOMAIN_NOT_FOUND", `Unable to resolve domain ${nameOrUuid}`, { cause: error });
+  }
+  if ((info.State || "").toLowerCase() !== "running") {
+    throw new BoxesError("DOMAIN_NOT_RUNNING", `Domain ${nameOrUuid} is not running`);
+  }
+  return info;
 }
 
 export async function startDomain(nameOrUuid: string) {
