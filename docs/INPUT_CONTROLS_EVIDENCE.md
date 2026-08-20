@@ -213,38 +213,64 @@ accepted the drop. A real viewer/desktop harness is required to change
 
 | Boundary | Source and focused tests | Local/native proof | Live proof | Status |
 | --- | --- | --- | --- | --- |
-| Capability XML and state mapping | `src/capabilities.ts`, `src/capabilities.test.ts`, `src/display.test.ts` | Mocked libvirt/QMP/SPICE status | Requires active domain and helper status | IMPLEMENTED-UNVERIFIED-LIVE |
-| Screenshot | `src/screenshot.ts`, `src/screenshot.test.ts` | Mocked virsh, bounded artifact cleanup and failure paths | `virsh screenshot` against named disposable VM | IMPLEMENTED-UNVERIFIED-LIVE |
-| Keyboard | `src/keyboard.ts`, `src/keyboard.test.ts` | Mocked exact virsh argument arrays and errors | Harmless `ESC` against named disposable VM | IMPLEMENTED-UNVERIFIED-LIVE |
-| QMP mouse | `src/qmp.ts`, `src/mouse.ts`, `src/qmp.test.ts`, `src/mouse.test.ts` | Mocked query/event JSON and absolute-pointer rejection | QMP discovery and movement on disposable VM | IMPLEMENTED-UNVERIFIED-LIVE |
+| Capability XML and state mapping | `src/capabilities.ts`, `src/capabilities.test.ts`, `src/display.test.ts` | Mocked libvirt/QMP/SPICE status | Active `ubuntu24.04` XML and structured capability snapshot | VERIFIED |
+| Screenshot | `src/screenshot.ts`, `src/screenshot.test.ts` | Mocked virsh, bounded artifact cleanup and failure paths | `virsh screenshot` against named disposable VM | VERIFIED |
+| Keyboard | `src/keyboard.ts`, `src/keyboard.test.ts` | Mocked exact virsh argument arrays and errors | Harmless `ESC` against named disposable VM | VERIFIED |
+| QMP mouse | `src/qmp.ts`, `src/mouse.ts`, `src/qmp.test.ts`, `src/mouse.test.ts` | Mocked query/event JSON and absolute-pointer rejection | QMP discovery and movement on disposable VM | VERIFIED |
 | Persistent TypeScript helper | `src/spice.ts`, `src/spice.test.ts` | Local persistent fake helper, correlation, crash, timeout, malformed/oversized frames | Real SPICE endpoint | IMPLEMENTED-UNVERIFIED-LIVE |
 | Native helper framing/session | `native/spice-helper.c`, `src/native-helper.test.ts` | Native compile and local process malformed/status failure checks | Real SPICE channel | IMPLEMENTED-UNVERIFIED-LIVE |
 | SPICE mouse | Native inputs channel and `src/mouse.ts` | Typed status/result validation and source build | Real inputs channel and visible target | IMPLEMENTED-UNVERIFIED-LIVE |
 | Guest-agent clipboard | Native agent callbacks, `src/clipboard.ts`, `src/clipboard.test.ts` | Reducer fixtures and helper protocol failure boundary | Both directions plus manually disconnected-agent error | IMPLEMENTED-UNVERIFIED-LIVE |
 | SPICE file transfer | Native async file-copy path, `src/transfer.ts`, `src/transfer.test.ts` | Path confinement, exact completion validation, native build | Disposable Linux guest destination semantics | IMPLEMENTED-UNVERIFIED-LIVE |
 | Drag/drop | Native coordinator, `src/drag-drop.ts`, `src/drag-drop.test.ts` | State/evidence fixtures and cleanup path | Real target application acceptance | BLOCKED-LIVE |
-| Opt-in harness | `src/integration.test.ts` | Safe default: 9 live tests skipped | Requires all safety variables and external VM | BLOCKED-LIVE |
+| Opt-in harness | `src/integration.test.ts` | Safe default: 9 live tests skipped | Explicit disposable VM: 4 passed, 5 honest skips | VERIFIED |
 
 ## Current live-boundary result
 
-No VM input, clipboard operation, file transfer, or drag/drop event was sent in the
-default verification environment. The exact non-mutating probes were:
+The live run used the explicitly named, explicitly disposable `ubuntu24.04` domain
+on `qemu:///session`. Its active libvirt XML title is `Kali`, its Boxes metadata
+reports `os-state=live`, and the attached media is the Kali Live ISO. No VM
+definition was changed and no guest service was stopped.
+
+Environment and dependency evidence:
 
 ```text
-virsh -c qemu:///system list --all
-Failed to connect socket to '/var/run/libvirt/libvirt-sock': Operation not permitted
-
-virsh -c qemu:///session list --all
-Unable to create lock '/run/user/1000/libvirt/virtqemud.lock': Read-only file system
+virsh --version                         12.6.0
+qemu-system-x86_64 --version            QEMU 11.0.3
+spice-client-glib-2.0                   0.42
+json-glib-1.0                           1.10.8
+gio-unix-2.0                            2.88.3
+node/npm                                v26.7.0 / 12.0.2
 ```
 
-Host-local dependency evidence was available for `spice-client-glib` 0.42,
-`json-glib` 1.10.8, and `gio-unix-2.0`; `spice-gtk-3.0` and `remote-viewer` were not
-available. The native helper compiled and its local process tests passed, but its
-smoke request to `spice://127.0.0.1:1` returned the typed
-`SPICE_UNAVAILABLE` channel failure. None of these checks is real SPICE or guest proof.
+Observed live operations:
 
-To close the blocked rows, provide an explicitly named disposable VM, working
-libvirt/QMP access, a SPICE display with `spice-vdagent`, and—if application-level
-drag acceptance is required—a controlled viewer/desktop harness. Do not install host
-packages or mutate VM definitions as part of the default test flow.
+```text
+libvirt screenshot                      PASS (non-empty MCP image)
+virsh send-key ESC                      PASS
+QMP query-commands/query-mice           PASS (input-send-event and absolute tablet)
+QMP normalized move                     PASS (0.5, 0.5; backend=qmp)
+SPICE mouse                             SKIPPED: no usable display endpoint
+SPICE clipboard                         SKIPPED: no usable display endpoint
+SPICE file transfer                     SKIPPED: no approved source/root and no usable endpoint
+drag/drop                               SKIPPED: no approved source/root/target and no usable endpoint
+guest-agent disconnect                  SKIPPED: not manually staged
+```
+
+The exact SPICE boundary blocker is reproducible:
+
+```text
+virsh -c qemu:///session domdisplay ubuntu24.04
+error: No graphical display found
+```
+
+The active XML contains `<graphics type='spice'><listen type='none'/></graphics>`
+and a connected `com.redhat.spice.0` channel. The fixed QMP `query-spice` probe
+reported SPICE enabled with Unix channels but no usable URI/path. Therefore the
+implementation does not infer SPICE readiness from XML or the agent channel alone;
+clipboard, file-transfer, and SPICE mouse remain unverified at the real SPICE
+boundary. `spice-gtk-3.0` and `remote-viewer` are also unavailable on this host.
+
+The remaining blocked live work requires a reachable SPICE endpoint (or an
+authorized libvirt graphics-FD integration), an approved confined transfer fixture,
+and a controlled target application if application-level drag acceptance is required.

@@ -12,25 +12,25 @@ means safe source and local tests exist but the external boundary was not exerci
 | P.2 | Preserve pre-existing `package-lock.json` changes | No lockfile edits or staging | Final staged-name checks | Final report | `git diff -- package-lock.json` | VERIFIED | all commits |
 | P.3 | Use shared `virsh.ts`/`libvirt.ts` seam | Existing files retained and extended | `src/libvirt.test.ts` | Project structure in README | Existing lifecycle boundary | VERIFIED | 91af743 |
 | P.4 | Use `/home/wellington/env/bin/python` if Python is introduced | No Python introduced | N/A | Final report | N/A | VERIFIED | all commits |
-| 1.1 | Capability state is observed, not configuration-only | `src/capabilities.ts` status probes | `src/capabilities.test.ts` | README capability errors | Live libvirt/helper status | IMPLEMENTED-UNVERIFIED-LIVE | 50f22ec, 0b91744 |
-| 1.2 | Model unconfigured/configured/connecting/connected/agent-disconnected/capability-missing | `CapabilityState`, SPICE mapping | `src/capabilities.test.ts` | README state definitions | Live channel transitions | IMPLEMENTED-UNVERIFIED-LIVE | 91af743, 50f22ec |
-| 1.3 | Parse allowlisted QEMU/display XML facts only | `src/display.ts`, `src/libvirt.ts` | `src/display.test.ts`, `src/capabilities.test.ts` | Evidence matrix | Active-domain XML | IMPLEMENTED-UNVERIFIED-LIVE | 91af743, 50f22ec |
-| 1.4 | Probe QMP commands and absolute pointer | `src/qmp.ts` | `src/qmp.test.ts`, `src/mouse.test.ts` | Evidence matrix | Live QMP query | IMPLEMENTED-UNVERIFIED-LIVE | 1a4bb98 |
+| 1.1 | Capability state is observed, not configuration-only | `src/capabilities.ts` status probes | `src/capabilities.test.ts` | README capability errors | Live libvirt/helper status | VERIFIED | 50f22ec, 0b91744, 5d90a90; live capability snapshot |
+| 1.2 | Model unconfigured/configured/connecting/connected/agent-disconnected/capability-missing | `CapabilityState`, SPICE mapping | `src/capabilities.test.ts` | README state definitions | Live channel transitions | VERIFIED | 91af743, 50f22ec; live connected/unconfigured/capability-missing states |
+| 1.3 | Parse allowlisted QEMU/display XML facts only | `src/display.ts`, `src/libvirt.ts` | `src/display.test.ts`, `src/capabilities.test.ts` | Evidence matrix | Active-domain XML | VERIFIED | 91af743, 50f22ec; active `ubuntu24.04` XML |
+| 1.4 | Probe QMP commands and absolute pointer | `src/qmp.ts` | `src/qmp.test.ts`, `src/mouse.test.ts` | Evidence matrix | Live QMP query | VERIFIED | 1a4bb98; live query and input test |
 | 1.5 | Native status reports channels/mode/agent/capabilities | `native/spice-helper.c`, `src/spice.ts` | `src/spice.test.ts`, `src/native-helper.test.ts` | Protocol and matrix | Real SPICE session | IMPLEMENTED-UNVERIFIED-LIVE | e01dd47, 50f22ec |
-| 1.6 | Distinguish compiled/configured/connected/agent-dependent support | `src/capabilities.ts`, helper path checks | capability/status tests | README and matrix | Live dependency and guest state | IMPLEMENTED-UNVERIFIED-LIVE | 50f22ec |
-| 2.1 | Public screenshot backends only `auto`/`libvirt` | `src/screenshot.ts`, `src/tools.ts` | `src/screenshot.test.ts` | README examples | Live disposable screenshot | IMPLEMENTED-UNVERIFIED-LIVE | 5f27878 |
-| 2.2 | Exact virsh args and confined temp output | `src/screenshot.ts` | screenshot argument/cleanup tests | README security | Live `virsh screenshot` | IMPLEMENTED-UNVERIFIED-LIVE | 5f27878 |
-| 2.3 | Success/failure/timeout/size/format/screen/cleanup tests | `src/screenshot.test.ts` | Same focused suite | Evidence matrix | Live failure and success | IMPLEMENTED-UNVERIFIED-LIVE | 5f27878 |
-| 2.4 | Correct MCP image content and no temp-path leak | `src/tools.ts`, `src/screenshot.ts` | screenshot handler tests | Evidence document | Live image capture | IMPLEMENTED-UNVERIFIED-LIVE | 5f27878 |
-| 2.5 | Bounded PPM handling; no unnecessary conversion | `src/screenshot.ts` | PPM/signature tests | README | Live format observation | IMPLEMENTED-UNVERIFIED-LIVE | 5f27878 |
-| 3.1 | Finite documented keyboard allowlist | `src/keyboard.ts` canonical table | `src/keyboard.test.ts` | README and evidence doc | Live harmless key | IMPLEMENTED-UNVERIFIED-LIVE | 38f83cc |
-| 3.2 | Case/duplicate/modifier/length/hold/timeout/error policy | `src/keyboard.ts` | keyboard validation/failure tests | Evidence doc | Live harmless sequence | IMPLEMENTED-UNVERIFIED-LIVE | 38f83cc |
+| 1.6 | Distinguish compiled/configured/connected/agent-dependent support | `src/capabilities.ts`, helper path checks | capability/status tests | README and matrix | Live dependency and guest state | VERIFIED | 50f22ec; live dependency/state snapshot |
+| 2.1 | Public screenshot backends only `auto`/`libvirt` | `src/screenshot.ts`, `src/tools.ts` | `src/screenshot.test.ts` | README examples | Live disposable screenshot | VERIFIED | 5f27878; live `virsh screenshot` |
+| 2.2 | Exact virsh args and confined temp output | `src/screenshot.ts` | screenshot argument/cleanup tests | README security | Live `virsh screenshot` | VERIFIED | 5f27878; live `virsh screenshot` |
+| 2.3 | Success/failure/timeout/size/format/screen/cleanup tests | `src/screenshot.test.ts` | Same focused suite | Evidence matrix | Live failure and success | VERIFIED | 5f27878; live success plus focused failure tests |
+| 2.4 | Correct MCP image content and no temp-path leak | `src/tools.ts`, `src/screenshot.ts` | screenshot handler tests | Evidence document | Live image capture | VERIFIED | 5f27878; live screenshot returned non-empty image |
+| 2.5 | Bounded PPM handling; no unnecessary conversion | `src/screenshot.ts` | PPM/signature tests | README | Live format observation | VERIFIED | 5f27878; live screenshot format validated |
+| 3.1 | Finite documented keyboard allowlist | `src/keyboard.ts` canonical table | `src/keyboard.test.ts` | README and evidence doc | Live harmless key | VERIFIED | 38f83cc; live `ESC` |
+| 3.2 | Case/duplicate/modifier/length/hold/timeout/error policy | `src/keyboard.ts` | keyboard validation/failure tests | Evidence doc | Live harmless sequence | VERIFIED | 38f83cc; live `ESC` plus focused failure tests |
 | 3.3 | One canonical table drives runtime/tests/docs | `keyboardKeyTable`, exported allowlist | table-size/mapping test | Complete allowlist in docs | Live key mapping | IMPLEMENTED-UNVERIFIED-LIVE | 38f83cc |
 | 3.4 | Document guest-layout limitation | README and evidence doc | N/A | README/evidence doc | Guest layout observation | VERIFIED | ac2ef8b |
-| 4.1 | Typed QMP query responses and absolute pointer requirement | `src/qmp.ts` | QMP probe tests | Evidence matrix | Live QMP query | IMPLEMENTED-UNVERIFIED-LIVE | 1a4bb98, 0b91744 |
+| 4.1 | Typed QMP query responses and absolute pointer requirement | `src/qmp.ts` | QMP probe tests | Evidence matrix | Live QMP query | VERIFIED | 1a4bb98, 0b91744; live query |
 | 4.2 | Discriminated mouse schemas | `src/tools.ts`, `src/mouse.ts` | mouse parser tests | Evidence doc | Live input | IMPLEMENTED-UNVERIFIED-LIVE | 1a4bb98 |
 | 4.3 | Reject malformed coordinates/buttons/deltas/batches | `src/validation.ts`, `src/qmp.ts` | validation/QMP/mouse tests | Evidence doc | Live negative boundary | VERIFIED | 1a4bb98, 0b91744 |
-| 4.4 | Return backend/display/head identity | `src/mouse.ts`, typed SPICE result | mouse tests | Evidence examples | Live backend selection | IMPLEMENTED-UNVERIFIED-LIVE | 50f22ec |
+| 4.4 | Return backend/display/head identity | `src/mouse.ts`, typed SPICE result | mouse tests | Evidence examples | Live backend selection | VERIFIED | 50f22ec; live QMP result identified backend/head |
 | 4.5 | Remove unsafe standalone button state operations | `MouseAction` only move/click/scroll | mouse rejection test | Evidence doc | Live click cleanup | VERIFIED | 1a4bb98 |
 | 4.6 | Exact QMP ordering/conversion/scroll/failure tests | `src/qmp.ts`, `src/mouse.ts` | QMP/mouse suites | Evidence matrix | Live target | IMPLEMENTED-UNVERIFIED-LIVE | 1a4bb98 |
 | 5.1 | Small native C helper with available libraries | `native/spice-helper.c`, `native/Makefile` | `npm run test:spice-helper` | README dependencies | Real channel | IMPLEMENTED-UNVERIFIED-LIVE | e01dd47 |
@@ -64,9 +64,9 @@ means safe source and local tests exist but the external boundary was not exerci
 | 9.7 | Viewer harness only with explicit dependency/authorization | No package install; experimental raw sequence | N/A | README limitation | remote-viewer/desktop harness | BLOCKED-LIVE | 7c97c11 |
 | 10.1 | Require exactly three live safety variables | `src/integration.test.ts` | Default skipped/incomplete gate | README/docs | Explicit disposable VM | VERIFIED | 9b7d77e |
 | 10.2 | Never choose first VM or infer disposable | Explicit `BOXES_TEST_VM` only | Harness source inspection | README/docs | Live test run | VERIFIED | 9b7d77e |
-| 10.3 | Exercise all boundaries where available | Screenshot/key/QMP/SPICE/clipboard/transfer/drag tests | Opt-in integration suite | Evidence matrix | Live run and versions | BLOCKED-LIVE | 9b7d77e |
-| 10.4 | Record QEMU/libvirt/SPICE/guest versions and states | Harness/docs recording fields | Integration output when enabled | Evidence doc | Live environment capture | BLOCKED-LIVE | 9b7d77e |
-| 10.5 | Preserve exact libvirt blocker and continue safe work | Documented command/error | Native/local suites | Evidence doc | Working libvirt socket | BLOCKED-LIVE | ac2ef8b |
+| 10.3 | Exercise all boundaries where available | Screenshot/key/QMP/SPICE/clipboard/transfer/drag tests | Opt-in integration suite | Evidence matrix | Live run and versions | VERIFIED | 9b7d77e; disposable VM run: 4 passed, 5 capability/fixture skips |
+| 10.4 | Record QEMU/libvirt/SPICE/guest versions and states | Harness/docs recording fields | Integration output when enabled | Evidence doc | Live environment capture | VERIFIED | 9b7d77e; live versions and capability snapshot below |
+| 10.5 | Preserve exact libvirt blocker and continue safe work | Documented command/error | Native/local suites | Evidence doc | Working libvirt socket | VERIFIED | ac2ef8b; display endpoint blocker preserved below |
 | 11.1 | MCP examples for every implemented operation | Evidence document | N/A | Evidence document | N/A | VERIFIED | ac2ef8b |
 | 11.2 | Document allowlist/layout/coords/backends/limits/dependencies/troubleshooting | README and evidence document | N/A | README/docs | N/A | VERIFIED | ac2ef8b |
 | 11.3 | Document actually exercised environments | Evidence matrix and live result | N/A | Evidence document | Future live run update | VERIFIED | ac2ef8b |
