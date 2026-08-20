@@ -227,10 +227,13 @@ accepted the drop. A real viewer/desktop harness is required to change
 
 ## Current live-boundary result
 
-The live run used the explicitly named, explicitly disposable `ubuntu24.04` domain
-on `qemu:///session`. Its active libvirt XML title is `Kali`, its Boxes metadata
-reports `os-state=live`, and the attached media is the Kali Live ISO. No VM
-definition was changed and no guest service was stopped.
+The live runs used explicitly named, explicitly disposable domains on
+`qemu:///session`:
+
+- `ubuntu24.04`, title `Kali`, Boxes `os-state=live`, attached Kali Live ISO;
+- `archlinux`, title `Omarchy`, Boxes `os-state=installed`, attached Omarchy 4.0.0 ISO.
+
+No VM definition was changed and no guest service was stopped.
 
 Environment and dependency evidence:
 
@@ -246,10 +249,10 @@ node/npm                                v26.7.0 / 12.0.2
 Observed live operations:
 
 ```text
-libvirt screenshot                      PASS (non-empty MCP image)
-virsh send-key ESC                      PASS
-QMP query-commands/query-mice           PASS (input-send-event and absolute tablet)
-QMP normalized move                     PASS (0.5, 0.5; backend=qmp)
+libvirt screenshot                      PASS on ubuntu24.04 and archlinux
+virsh send-key ESC                      PASS on ubuntu24.04 and archlinux
+QMP query-commands/query-mice           PASS on ubuntu24.04 and archlinux
+QMP normalized move                     PASS on ubuntu24.04 and archlinux (0.5, 0.5; backend=qmp)
 SPICE mouse                             SKIPPED: no usable display endpoint
 SPICE clipboard                         SKIPPED: no usable display endpoint
 SPICE file transfer                     SKIPPED: no approved source/root and no usable endpoint
@@ -260,16 +263,19 @@ guest-agent disconnect                  SKIPPED: not manually staged
 The exact SPICE boundary blocker is reproducible:
 
 ```text
-virsh -c qemu:///session domdisplay ubuntu24.04
+virsh -c qemu:///session domdisplay archlinux
 error: No graphical display found
 ```
 
-The active XML contains `<graphics type='spice'><listen type='none'/></graphics>`
-and a connected `com.redhat.spice.0` channel. The fixed QMP `query-spice` probe
-reported SPICE enabled with Unix channels but no usable URI/path. Therefore the
-implementation does not infer SPICE readiness from XML or the agent channel alone;
-clipboard, file-transfer, and SPICE mouse remain unverified at the real SPICE
-boundary. `spice-gtk-3.0` and `remote-viewer` are also unavailable on this host.
+Both active XML documents contain
+`<graphics type='spice'><listen type='none'/></graphics>` and a connected
+`com.redhat.spice.0` channel. The fixed QMP `query-spice` probe for `archlinux`
+reported SPICE enabled with Unix channels but no usable URI/path; the structured
+capability result was `qmp=connected`, `spice=unconfigured`, and
+`clipboard/fileTransfer=capability-missing`. Therefore the implementation does not
+infer SPICE readiness from XML or the agent channel alone; clipboard, file-transfer,
+and SPICE mouse remain unverified at the real SPICE boundary. `spice-gtk-3.0`,
+`remote-viewer`, and `virt-viewer` are unavailable on this host.
 
 The remaining blocked live work requires a reachable SPICE endpoint (or an
 authorized libvirt graphics-FD integration), an approved confined transfer fixture,

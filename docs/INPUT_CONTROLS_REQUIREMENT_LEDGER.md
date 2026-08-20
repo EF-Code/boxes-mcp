@@ -64,9 +64,9 @@ means safe source and local tests exist but the external boundary was not exerci
 | 9.7 | Viewer harness only with explicit dependency/authorization | No package install; experimental raw sequence | N/A | README limitation | remote-viewer/desktop harness | BLOCKED-LIVE | 7c97c11 |
 | 10.1 | Require exactly three live safety variables | `src/integration.test.ts` | Default skipped/incomplete gate | README/docs | Explicit disposable VM | VERIFIED | 9b7d77e |
 | 10.2 | Never choose first VM or infer disposable | Explicit `BOXES_TEST_VM` only | Harness source inspection | README/docs | Live test run | VERIFIED | 9b7d77e |
-| 10.3 | Exercise all boundaries where available | Screenshot/key/QMP/SPICE/clipboard/transfer/drag tests | Opt-in integration suite | Evidence matrix | Live run and versions | VERIFIED | 9b7d77e; disposable VM run: 4 passed, 5 capability/fixture skips |
-| 10.4 | Record QEMU/libvirt/SPICE/guest versions and states | Harness/docs recording fields | Integration output when enabled | Evidence doc | Live environment capture | VERIFIED | 9b7d77e; live versions and capability snapshot below |
-| 10.5 | Preserve exact libvirt blocker and continue safe work | Documented command/error | Native/local suites | Evidence doc | Working libvirt socket | VERIFIED | ac2ef8b; display endpoint blocker preserved below |
+| 10.3 | Exercise all boundaries where available | Screenshot/key/QMP/SPICE/clipboard/transfer/drag tests | Opt-in integration suite | Evidence matrix | Live run and versions | VERIFIED | 9b7d77e, d70a642; two disposable VM runs: 4 passed, 5 capability/fixture skips each |
+| 10.4 | Record QEMU/libvirt/SPICE/guest versions and states | Harness/docs recording fields | Integration output when enabled | Evidence doc | Live environment capture | VERIFIED | 9b7d77e, d70a642; live versions and capability snapshots below |
+| 10.5 | Preserve exact libvirt blocker and continue safe work | Documented command/error | Native/local suites | Evidence doc | Working libvirt socket | VERIFIED | ac2ef8b, d70a642; display endpoint blocker preserved below |
 | 11.1 | MCP examples for every implemented operation | Evidence document | N/A | Evidence document | N/A | VERIFIED | ac2ef8b |
 | 11.2 | Document allowlist/layout/coords/backends/limits/dependencies/troubleshooting | README and evidence document | N/A | README/docs | N/A | VERIFIED | ac2ef8b |
 | 11.3 | Document actually exercised environments | Evidence matrix and live result | N/A | Evidence document | Future live run update | VERIFIED | ac2ef8b |
