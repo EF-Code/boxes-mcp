@@ -98,8 +98,12 @@ export function parseCoordinates(args: Record<string, unknown>): CoordinateReque
     "INVALID_COORDINATES",
     "normalized"
   );
-  const x = boundedNumber(args.x, "x", coordinateSpace === "normalized" ? 0 : 0, coordinateSpace === "normalized" ? 1 : Number.MAX_SAFE_INTEGER);
-  const y = boundedNumber(args.y, "y", coordinateSpace === "normalized" ? 0 : 0, coordinateSpace === "normalized" ? 1 : Number.MAX_SAFE_INTEGER);
+  const x = coordinateSpace === "pixels"
+    ? boundedInteger(args.x, "x", 0, Number.MAX_SAFE_INTEGER)
+    : boundedNumber(args.x, "x", 0, 1);
+  const y = coordinateSpace === "pixels"
+    ? boundedInteger(args.y, "y", 0, Number.MAX_SAFE_INTEGER)
+    : boundedNumber(args.y, "y", 0, 1);
 
   if (coordinateSpace === "pixels") {
     const width = boundedInteger(args.width, "width", 1, 1_000_000);

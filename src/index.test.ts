@@ -4,7 +4,7 @@ import { handleTool, TOOL_DEFINITIONS } from "./tools.js";
 describe("MCP tool registry", () => {
   it("contains all existing tools and new interaction tools", () => {
     const names = TOOL_DEFINITIONS.map(tool => tool.name);
-    expect(names).toHaveLength(18);
+    expect(names).toHaveLength(19);
     expect(new Set(names).size).toBe(names.length);
     expect(names).toEqual(expect.arrayContaining([
       "boxes.list",
@@ -20,6 +20,7 @@ describe("MCP tool registry", () => {
       "boxes.snapshots.revert",
       "boxes.snapshots.delete",
       "boxes.display",
+      "boxes.capabilities",
       "boxes.screenshot",
       "boxes.keyboard",
       "boxes.mouse",
@@ -47,6 +48,13 @@ describe("MCP tool registry", () => {
     });
     expect(byName.get("boxes.drag_drop")?.inputSchema).toMatchObject({
       required: ["nameOrUuid", "sourcePath", "x", "y"]
+    });
+  });
+
+  it("does not advertise unimplemented screenshot backends", () => {
+    const screenshot = TOOL_DEFINITIONS.find(tool => tool.name === "boxes.screenshot");
+    expect(screenshot?.inputSchema).toMatchObject({
+      properties: { backend: { enum: ["auto", "libvirt"] } }
     });
   });
 });

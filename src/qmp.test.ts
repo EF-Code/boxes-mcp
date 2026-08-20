@@ -17,6 +17,15 @@ describe("QMP adapter", () => {
     expect(JSON.parse(args[5])).toEqual({ execute: "query-mice", arguments: {} });
   });
 
+  it("probes the supported command and absolute pointer device", async () => {
+    vi.mocked(exec.sh)
+      .mockResolvedValueOnce({ stdout: '{"return":[{"name":"input-send-event"}]}', stderr: "" })
+      .mockResolvedValueOnce({ stdout: '{"return":[{"name":"tablet","absolute":true}]}', stderr: "" });
+    const { probeQmp } = await import("./qmp.js");
+    await expect(probeQmp("vm")).resolves.toBeUndefined();
+    expect(vi.mocked(exec.sh)).toHaveBeenCalledTimes(2);
+  });
+
   it("maps QMP command errors to stable codes", async () => {
     vi.mocked(exec.sh).mockResolvedValueOnce({
       stdout: '{"error":{"class":"CommandNotFound","desc":"unknown command"}}',

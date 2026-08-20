@@ -18,6 +18,7 @@ import { sendKeyboard } from "./keyboard.js";
 import { sendMouse } from "./mouse.js";
 import { clipboard as clipboardOperation } from "./clipboard.js";
 import { dragDrop as dragDropOperation } from "./drag-drop.js";
+import { discoverCapabilities } from "./capabilities.js";
 import { BoxesError, errorCode, errorMessage } from "./errors.js";
 
 export interface ToolDefinition {
@@ -128,6 +129,19 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
     inputSchema: { type: "object", properties: { nameOrUuid: domainProperty }, required: ["nameOrUuid"] }
   },
   {
+    name: "boxes.capabilities",
+    description: "Report observed display and interaction capability state for a running VM",
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        nameOrUuid: domainProperty,
+        probeQmp: { type: "boolean", default: false }
+      },
+      required: ["nameOrUuid"]
+    }
+  },
+  {
     name: "boxes.screenshot",
     description: "Capture a running VM display screenshot as MCP image content",
     inputSchema: {
@@ -136,7 +150,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       properties: {
         nameOrUuid: domainProperty,
         screen: { type: "integer", minimum: 0, maximum: 16, default: 0 },
-        backend: { type: "string", enum: ["auto", "libvirt", "spice", "guest"], default: "auto" }
+        backend: { type: "string", enum: ["auto", "libvirt"], default: "auto" }
       },
       required: ["nameOrUuid"]
     }
@@ -257,6 +271,10 @@ export async function handleTool(name: string, args: unknown): Promise<ToolResul
         return textResult(await deleteSnapshot(request.nameOrUuid, request.snapshot));
       }
       case "boxes.display": return textResult(await displayAddress((args as { nameOrUuid: string }).nameOrUuid));
+      case "boxes.capabilities": {
+        const request = args as { nameOrUuid: string; probeQmp?: boolean };
+        return textResult(await discoverCapabilities(request.nameOrUuid, { probeQmp: request.probeQmp ?? false }));
+      }
       case "boxes.screenshot": {
         const result = await captureScreenshot(args);
         return {

@@ -157,3 +157,9 @@ export async function displayAddress(nameOrUuid: string) {
   const { stdout } = await sh(VIRSH, [...commonArgs(), "domdisplay", nameOrUuid]);
   return { display: stdout.trim() }; // e.g. spice://127.0.0.1:5900 or vnc://...
 }
+
+/** Return active domain XML to internal capability parsers; callers must not expose it. */
+export async function domainXml(nameOrUuid: string): Promise<string> {
+  const { stdout } = await sh(VIRSH, [...commonArgs(), "dumpxml", nameOrUuid]);
+  return stdout;
+}

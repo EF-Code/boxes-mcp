@@ -15,6 +15,18 @@ export interface QmpResponse {
   error?: { class?: string; desc?: string };
 }
 
+export interface QmpMouseDevice {
+  name?: string;
+  index?: number;
+  absolute?: boolean;
+  [key: string]: unknown;
+}
+
+export interface QmpCommandInfo {
+  name?: string;
+  [key: string]: unknown;
+}
+
 function parseResponse(stdout: string): QmpResponse {
   const trimmed = stdout.trim();
   if (!trimmed) throw new BoxesError("QMP_UNAVAILABLE", "QMP returned no response");
@@ -27,7 +39,7 @@ function parseResponse(stdout: string): QmpResponse {
 
 export async function qmpExecute(
   nameOrUuid: string,
-  execute: "query-mice" | "input-send-event",
+  execute: "query-commands" | "query-mice" | "input-send-event",
   argumentsValue: Record<string, unknown> = {}
 ): Promise<unknown> {
   const request = JSON.stringify({ execute, arguments: argumentsValue });
@@ -56,7 +68,28 @@ export async function qmpExecute(
 }
 
 export async function probeQmp(nameOrUuid: string): Promise<void> {
-  await qmpExecute(nameOrUuid, "query-mice");
+  const commands = await queryQmpCommands(nameOrUuid);
+  if (!commands.some(command => command.name === "input-send-event")) {
+    throw new BoxesError("QMP_COMMAND_UNSUPPORTED", "QMP does not support input-send-event");
+  }
+  const devices = await queryQmpMice(nameOrUuid);
+  if (!devices.some(device => device.absolute === true)) {
+    throw new BoxesError("QMP_COMMAND_UNSUPPORTED", "QMP has no absolute pointer device");
+  }
+}
+
+export async function queryQmpCommands(nameOrUuid: string): Promise<QmpCommandInfo[]> {
+  const result = await qmpExecute(nameOrUuid, "query-commands");
+  if (!Array.isArray(result)) throw new BoxesError("QMP_UNAVAILABLE", "QMP returned invalid command metadata");
+  return result.filter((value): value is QmpCommandInfo => value !== null && typeof value === "object")
+    .map(value => value as QmpCommandInfo);
+}
+
+export async function queryQmpMice(nameOrUuid: string): Promise<QmpMouseDevice[]> {
+  const result = await qmpExecute(nameOrUuid, "query-mice");
+  if (!Array.isArray(result)) throw new BoxesError("QMP_UNAVAILABLE", "QMP returned invalid mouse metadata");
+  return result.filter((value): value is QmpMouseDevice => value !== null && typeof value === "object")
+    .map(value => value as QmpMouseDevice);
 }
 
 export function absoluteCoordinate(value: number, maximum = 0x7fff): number {
