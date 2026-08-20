@@ -217,10 +217,10 @@ accepted the drop. A real viewer/desktop harness is required to change
 | Screenshot | `src/screenshot.ts`, `src/screenshot.test.ts` | Mocked virsh, bounded artifact cleanup and failure paths | `virsh screenshot` against named disposable VM | VERIFIED |
 | Keyboard | `src/keyboard.ts`, `src/keyboard.test.ts` | Mocked exact virsh argument arrays and errors | Harmless `ESC` against named disposable VM | VERIFIED |
 | QMP mouse | `src/qmp.ts`, `src/mouse.ts`, `src/qmp.test.ts`, `src/mouse.test.ts` | Mocked query/event JSON and absolute-pointer rejection | QMP discovery and movement on disposable VM | VERIFIED |
-| Persistent TypeScript helper | `src/spice.ts`, `src/spice.test.ts` | Local persistent fake helper, correlation, crash, timeout, malformed/oversized frames | Real SPICE endpoint through persistent status/mouse/transfer requests | VERIFIED |
+| Persistent TypeScript helper | `src/spice.ts`, `src/spice.test.ts` | Local persistent fake helper, correlation, cancellation, crash, timeout, malformed/oversized frames | Real SPICE endpoint through persistent status/mouse/transfer requests; helper restart recovered status | VERIFIED for process restart; guest reconnect remains unverified |
 | Native helper framing/session | `native/spice-helper.c`, `src/native-helper.test.ts` | Native compile and local process malformed/status failure checks | Real libvirt graphics-FD SPICE session | VERIFIED |
 | SPICE mouse | Native inputs channel and `src/mouse.ts` | Typed status/result validation and source build | Real inputs channel; auto move plus explicit click/scroll completed at 1280x800 | VERIFIED |
-| Guest-agent clipboard | Native agent callbacks, `src/clipboard.ts`, `src/clipboard.test.ts` | Reducer fixtures and helper protocol failure boundary | Omarchy agent connected but clipboard capability not announced; round-trip unavailable | BLOCKED-LIVE |
+| Guest-agent clipboard | Native agent callbacks, `src/clipboard.ts`, `src/clipboard.test.ts` | Reducer fixtures and helper protocol failure boundary | Omarchy agent connected and file-transfer-capable, but clipboard capability was not announced; round-trip unavailable | BLOCKED-LIVE |
 | SPICE file transfer | Native async file-copy path, `src/transfer.ts`, `src/transfer.test.ts` | Path confinement, exact completion validation, native build | 46-byte confined fixture completed through disposable Omarchy SPICE transfer | VERIFIED for transport; destination semantics unverified |
 | Drag/drop | Native coordinator, `src/drag-drop.ts`, `src/drag-drop.test.ts` | State/evidence fixtures and cleanup path | Live transfer and pointer release observed; application acceptance remained `unknown` | IMPLEMENTED-UNVERIFIED-LIVE |
 | Opt-in harness | `src/integration.test.ts` | Safe default: 9 live tests skipped | Explicit Omarchy VM: 7 passed, 2 honest skips | VERIFIED |
@@ -258,6 +258,8 @@ SPICE clipboard                         SKIPPED: guest agent does not announce c
 SPICE file transfer                     PASS on archlinux via real async SPICE copy; 46-byte confined fixture
 drag/drop                               PASS for transfer and pointer release; application acceptance=unknown
 guest-agent disconnect                  SKIPPED: not manually staged
+helper process restart                  PASS: status connected before and after TypeScript client/helper restart
+guest reboot reconnect                  BLOCKED: `virsh reboot archlinux` returned `domain is not running` after the VM had already shut off
 ```
 
 The original endpoint symptom remains reproducible through the viewer-oriented libvirt lookup:
@@ -281,7 +283,7 @@ channel with `virDomainOpenGraphicsFD`. The Omarchy capability snapshot was:
   "backends": {
     "qmp": { "state": "connected" },
     "spice": { "state": "connected" },
-    "clipboard": { "state": "agent-disconnected", "reason": "The SPICE guest agent does not announce clipboard capability" },
+    "clipboard": { "state": "capability-missing", "reason": "The connected SPICE guest agent does not announce clipboard capability" },
     "fileTransfer": { "state": "connected" }
   }
 }

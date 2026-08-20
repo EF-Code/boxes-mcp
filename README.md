@@ -6,6 +6,11 @@
 
 A lightweight Model Context Protocol (MCP) server that enables Claude Code to manage GNOME Boxes virtual machines through libvirt/virsh. Provides safe, reversible VM operations with comprehensive snapshot management.
 
+The project intentionally targets GNOME Boxes' Linux libvirt/QEMU stack. VMware and
+VirtualBox are not currently supported; their display, input, guest-agent, clipboard,
+and drag/drop APIs have different trust and capability contracts and should be added as
+separate, evidence-backed providers rather than inferred from the libvirt implementation.
+
 ## Features
 
 - 🖥️ **VM Lifecycle Management** - Start, stop, reboot, suspend, and resume VMs
@@ -224,7 +229,7 @@ npm run test:watch
 npm run test:coverage
 ```
 
-**Local test coverage**: the current checkout runs 84 passing tests and 9 gated live
+**Local test coverage**: the current checkout runs 89 passing tests and 9 gated live
 tests skipped by default. The default suite is safe to run without libvirt access.
 
 - `exec.ts`: 100% statements
@@ -391,8 +396,18 @@ Use `boxes.capabilities` with `probeSpice: true` and inspect the returned state:
   proof has not been requested;
 - `connecting`: the helper observed an incomplete channel set;
 - `connected`: the required channels are connected;
-- `agent-disconnected`: the guest agent is absent or does not announce clipboard;
+- `agent-disconnected`: the guest agent is not connected;
 - `capability-missing`: the backend, channel, helper, or guest capability is absent.
+
+For example, a connected guest agent that supports file transfer but does not announce
+clipboard is `capability-missing`, not `agent-disconnected`. To enable clipboard, the
+guest must have its distribution's `spice-vdagent` service installed, running in the
+desktop session, and connected through the virtio SPICE agent channel. The server does
+not install guest packages or start guest services automatically.
+
+The persistent SPICE client also accepts an abort signal. Cancellation terminates the
+current helper process, fails all pending operations deterministically, and allows the
+next request to create a clean session; this is reported as `OPERATION_CANCELLED`.
 
 Check the host dependencies and helper directly without sending input to a VM:
 
