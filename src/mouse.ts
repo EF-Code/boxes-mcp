@@ -3,7 +3,7 @@ import { parseCoordinates, asRecord, boundedInteger, enumValue, requireNameOrUui
 import { absoluteCoordinate, pixelCoordinate, probeQmp, sendQmpInput, type QmpButton, type QmpInputEvent } from "./qmp.js";
 import { requireRunningDomain } from "./libvirt.js";
 import { displayEndpoint } from "./display.js";
-import { callSpiceHelper, spiceHelperConfigured, spiceHelperStatus } from "./spice.js";
+import { callSpiceHelper, parseSpiceMouseResult, spiceHelperConfigured, spiceHelperStatus } from "./spice.js";
 
 export type MouseAction = "move" | "click" | "scroll";
 export type MouseBackend = "auto" | "qmp" | "spice";
@@ -102,17 +102,23 @@ export async function sendMouse(value: unknown): Promise<Record<string, unknown>
   }
 
   if (request.backend === "spice" || (request.backend === "auto" && endpoint?.protocol === "spice" && spiceHelperConfigured())) {
-    let spiceReady = request.backend === "spice";
-    if (!spiceReady && endpoint) {
+    let spiceReady = false;
+    let spiceStatus;
+    if (endpoint) {
       try {
-        const status = await spiceHelperStatus(request.nameOrUuid, endpoint);
-        spiceReady = status.mainChannel === "connected" && status.inputsChannel === "connected" && status.displayChannel === "connected";
-      } catch {
-        spiceReady = false;
+        spiceStatus = await spiceHelperStatus(request.nameOrUuid, endpoint);
+        spiceReady = spiceStatus.mainChannel === "connected"
+          && spiceStatus.inputsChannel === "connected"
+          && spiceStatus.displayChannel === "connected"
+          && spiceStatus.geometryKnown
+          && spiceStatus.mouseMode >= 1
+          && spiceStatus.mouseMode <= 3;
+      } catch (error) {
+        if (request.backend === "spice") throw error;
       }
     }
     if (spiceReady && endpoint?.protocol === "spice" && spiceHelperConfigured()) {
-      await callSpiceHelper({
+      const result = await callSpiceHelper({
         operation: "mouse",
         domain: request.nameOrUuid,
         display: endpoint,
@@ -128,6 +134,7 @@ export async function sendMouse(value: unknown): Promise<Record<string, unknown>
           deltaY: request.deltaY
         }
       });
+      const completion = parseSpiceMouseResult(result);
       return {
         ok: true,
         backend: "spice",
@@ -135,6 +142,9 @@ export async function sendMouse(value: unknown): Promise<Record<string, unknown>
         x: request.x,
         y: request.y,
         coordinateSpace: request.coordinateSpace,
+        display: completion.display,
+        head: completion.display,
+        geometry: { width: completion.width, height: completion.height },
         button: request.button,
         deltaX: request.deltaX,
         deltaY: request.deltaY
@@ -142,6 +152,7 @@ export async function sendMouse(value: unknown): Promise<Record<string, unknown>
     }
     if (request.backend === "spice") {
       if (endpoint?.protocol !== "spice") throw new BoxesError("UNSUPPORTED_DISPLAY", "SPICE mouse input requires a SPICE display");
+      if (spiceStatus && !spiceStatus.geometryKnown) throw new BoxesError("SPICE_CAPABILITY_MISSING", "SPICE display geometry is not available");
       throw new BoxesError("SPICE_UNAVAILABLE", "SPICE inputs channel is not connected");
     }
   }

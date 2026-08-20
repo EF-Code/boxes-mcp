@@ -93,6 +93,14 @@ export interface SpiceStatusResult {
   height: number;
 }
 
+export interface SpiceMouseResult {
+  backend: "spice";
+  completed: true;
+  display: number;
+  width: number;
+  height: number;
+}
+
 function isObject(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
@@ -113,7 +121,7 @@ export function parseSpiceStatus(value: unknown): SpiceStatusResult {
     return status[name] as boolean;
   };
   const integer = (name: string): number => {
-    if (typeof status[name] !== "number" || !Number.isInteger(status[name])) {
+    if (typeof status[name] !== "number" || !Number.isInteger(status[name]) || (name !== "mouseMode" && (status[name] as number) < 0)) {
       throw new BoxesError("SPICE_UNAVAILABLE", `SPICE helper returned invalid ${name}`);
     }
     return status[name] as number;
@@ -129,6 +137,22 @@ export function parseSpiceStatus(value: unknown): SpiceStatusResult {
     geometryKnown: bool("geometryKnown"),
     width: integer("width"),
     height: integer("height")
+  };
+}
+
+export function parseSpiceMouseResult(value: unknown): SpiceMouseResult {
+  if (!isObject(value) || value.backend !== "spice" || value.completed !== true
+    || typeof value.display !== "number" || !Number.isInteger(value.display) || value.display < 0
+    || typeof value.width !== "number" || !Number.isInteger(value.width) || value.width < 1
+    || typeof value.height !== "number" || !Number.isInteger(value.height) || value.height < 1) {
+    throw new BoxesError("SPICE_UNAVAILABLE", "SPICE helper returned invalid mouse completion data");
+  }
+  return {
+    backend: "spice",
+    completed: true,
+    display: value.display,
+    width: value.width,
+    height: value.height
   };
 }
 

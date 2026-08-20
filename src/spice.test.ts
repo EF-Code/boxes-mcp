@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { callSpiceHelper, closeSpiceHelper, parseSpiceStatus, SpiceHelperClient, spiceHelperConfigured } from "./spice.js";
+import { callSpiceHelper, closeSpiceHelper, parseSpiceMouseResult, parseSpiceStatus, SpiceHelperClient, spiceHelperConfigured } from "./spice.js";
 
 describe("SPICE helper boundary", () => {
   let tempDirectory: string | undefined;
@@ -134,5 +134,12 @@ done
       geometryKnown: false, width: 0, height: 0
     })).toMatchObject({ displayChannel: "disconnected", geometryKnown: false });
     expect(() => parseSpiceStatus({ mainChannel: "ready" })).toThrow(/invalid/);
+  });
+
+  it("validates mouse completion and geometry evidence", () => {
+    expect(parseSpiceMouseResult({ backend: "spice", completed: true, display: 0, width: 1024, height: 768 }))
+      .toMatchObject({ display: 0, width: 1024, height: 768 });
+    expect(() => parseSpiceMouseResult({ backend: "spice", completed: true, display: 0, width: 0, height: 768 }))
+      .toThrow(/mouse/);
   });
 });

@@ -11,4 +11,10 @@ describe("display endpoint parsing", () => {
     });
     expect(parseDisplayEndpoint("vnc://127.0.0.1:5901").protocol).toBe("vnc");
   });
+
+  it("rejects credentials and unallowlisted endpoint query parameters", () => {
+    expect(() => parseDisplayEndpoint("spice://user:secret@127.0.0.1:5900")).toThrow(/credentials/);
+    expect(() => parseDisplayEndpoint("spice://127.0.0.1:5900?ticket=secret")).toThrow(/query/);
+    expect(parseDisplayEndpoint("spice://127.0.0.1:5900?tls-port=5901")).toMatchObject({ tlsPort: 5901 });
+  });
 });

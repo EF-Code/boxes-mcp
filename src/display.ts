@@ -80,6 +80,13 @@ export function parseDisplayEndpoint(display: string): DisplayEndpoint {
     const normalizedProtocol: DisplayProtocol = protocol === "spice" || protocol === "vnc"
       ? protocol
       : "unknown";
+    if (uri.username || uri.password || uri.hash) {
+      throw new BoxesError("UNSUPPORTED_DISPLAY", "Display endpoints must not contain credentials or fragments");
+    }
+    const unexpectedQuery = [...uri.searchParams.keys()].filter(key => key !== "tls-port");
+    if (unexpectedQuery.length > 0) {
+      throw new BoxesError("UNSUPPORTED_DISPLAY", "Display endpoint contains unsupported query parameters");
+    }
     const port = uri.port ? Number(uri.port) : undefined;
     const tlsPortValue = uri.searchParams.get("tls-port");
     const tlsPort = tlsPortValue && /^\d+$/.test(tlsPortValue) ? Number(tlsPortValue) : undefined;
@@ -93,6 +100,7 @@ export function parseDisplayEndpoint(display: string): DisplayEndpoint {
       path: normalizedPath
     };
   } catch (error) {
+    if (error instanceof BoxesError) throw error;
     throw new BoxesError("UNSUPPORTED_DISPLAY", "The display endpoint is not a valid URI", { cause: error });
   }
 }

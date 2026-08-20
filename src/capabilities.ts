@@ -53,14 +53,15 @@ export async function discoverCapabilities(
 
   const spiceConfigured = display?.protocol === "spice" && spiceHelperConfigured();
   let spiceStatus;
+  let spiceProbeError: BoxesError | undefined;
   if (options.probeSpice && spiceConfigured && display) {
     try {
       spiceStatus = await spiceHelperStatus(nameOrUuid, display);
     } catch (error) {
       if (error instanceof BoxesError && error.code === "SPICE_AGENT_DISCONNECTED") {
-        spiceStatus = undefined;
+        spiceProbeError = error;
       } else if (error instanceof BoxesError && error.code === "SPICE_UNAVAILABLE") {
-        spiceStatus = undefined;
+        spiceProbeError = error;
       } else {
         throw error;
       }
@@ -90,16 +91,24 @@ export async function discoverCapabilities(
       qmp,
       spice: spiceStatus
         ? { state: spiceStatus.mainChannel === "connected" && spiceStatus.displayChannel === "connected" && spiceStatus.inputsChannel === "connected" ? "connected" : "connecting" }
+        : spiceProbeError
+        ? { state: "capability-missing", reason: spiceProbeError.message }
         : spiceConfigured
         ? { state: "configured" }
         : { state: "unconfigured", reason: "A reviewed executable and SPICE display are required" },
       clipboard: spiceStatus
         ? spiceStatus.clipboard ? { state: "connected" } : { state: "agent-disconnected", reason: "The SPICE guest agent does not announce clipboard capability" }
+        : spiceProbeError?.code === "SPICE_AGENT_DISCONNECTED"
+        ? { state: "agent-disconnected", reason: spiceProbeError.message }
+        : spiceProbeError
+        ? { state: "capability-missing", reason: spiceProbeError.message }
         : spiceConfigured && domain.hasSpiceAgentChannel
         ? { state: "configured", reason: "Guest agent connection still requires SPICE status probing" }
         : { state: "capability-missing", reason: "SPICE helper and virtio SPICE agent channel are required" },
       fileTransfer: spiceStatus
         ? spiceStatus.fileTransfer ? { state: "connected" } : { state: "capability-missing", reason: "The SPICE guest agent does not announce file transfer" }
+        : spiceProbeError
+        ? { state: "capability-missing", reason: spiceProbeError.message }
         : spiceConfigured && domain.hasSpiceAgentChannel
         ? { state: "configured", reason: "Guest agent connection still requires SPICE status probing" }
         : { state: "capability-missing", reason: "SPICE helper and virtio SPICE agent channel are required" }

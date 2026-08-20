@@ -55,4 +55,19 @@ describe("capability discovery", () => {
     });
     expect(qmp.probeQmp).not.toHaveBeenCalled();
   });
+
+  it("maps observed SPICE agent and channel states", async () => {
+    vi.mocked(spice.spiceHelperStatus).mockResolvedValue({
+      mainChannel: "connected", inputsChannel: "disconnected", displayChannel: "connected",
+      agentConnected: false, clipboard: false, fileTransfer: false, mouseMode: 1,
+      geometryKnown: false, width: 0, height: 0
+    });
+    await expect(discoverCapabilities("vm", { probeSpice: true })).resolves.toMatchObject({
+      backends: {
+        spice: { state: "connecting" },
+        clipboard: { state: "agent-disconnected" },
+        fileTransfer: { state: "capability-missing" }
+      }
+    });
+  });
 });
