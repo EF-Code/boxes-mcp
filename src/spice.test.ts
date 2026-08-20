@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { access, chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { callSpiceHelper, closeSpiceHelper, parseSpiceMouseResult, parseSpiceStatus, SpiceHelperClient, spiceHelperConfigured } from "./spice.js";
 
@@ -147,7 +147,7 @@ done
 if [ ! -e "$BOXES_TEST_MARKER" ]; then
   touch "$BOXES_TEST_MARKER"
   IFS= read -r request
-  sleep 5
+  while IFS= read -r request; do :; done
 fi
 while IFS= read -r request; do
   id=$(printf '%s' "$request" | sed -n 's/.*"id":"\\([^\"]*\\)".*/\\1/p')
@@ -165,6 +165,15 @@ done
       arguments: {}
     };
     const pending = callSpiceHelper(operation, { signal: controller.signal });
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      try {
+        await access(marker);
+        break;
+      } catch {
+        await new Promise(resolve => setTimeout(resolve, 10));
+      }
+    }
+    await expect(access(marker)).resolves.toBeUndefined();
     controller.abort();
     await expect(pending).rejects.toMatchObject({ code: "OPERATION_CANCELLED" });
     await expect(callSpiceHelper(operation)).resolves.toEqual({ recovered: true });
