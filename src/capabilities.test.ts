@@ -71,6 +71,24 @@ describe("capability discovery", () => {
     });
   });
 
+  it("distinguishes a connected agent without clipboard capability", async () => {
+    vi.mocked(spice.spiceHelperStatus).mockResolvedValue({
+      mainChannel: "connected", inputsChannel: "connected", displayChannel: "connected",
+      agentConnected: true, clipboard: false, fileTransfer: true, mouseMode: 2,
+      geometryKnown: true, width: 1280, height: 800
+    });
+    await expect(discoverCapabilities("vm", { probeSpice: true })).resolves.toMatchObject({
+      backends: {
+        spice: { state: "connected" },
+        clipboard: {
+          state: "capability-missing",
+          reason: "The connected SPICE guest agent does not announce clipboard capability"
+        },
+        fileTransfer: { state: "connected" }
+      }
+    });
+  });
+
   it("keeps QMP discovery usable when libvirt has no display URI", async () => {
     vi.mocked(libvirt.displayAddress).mockRejectedValue(new Error("No graphical display found"));
     vi.mocked(qmp.probeQmp).mockResolvedValue({ absolute: true });

@@ -11,6 +11,7 @@ describe("SPICE helper boundary", () => {
     delete process.env.BOXES_SPICE_HELPER;
     delete process.env.BOXES_SPICE_OPERATION_TIMEOUT_MS;
     delete process.env.BOXES_TEST_CAPTURE;
+    delete process.env.BOXES_TEST_MARKER;
     if (tempDirectory) await rm(tempDirectory, { recursive: true, force: true });
     tempDirectory = undefined;
   });
@@ -136,6 +137,37 @@ done
     await chmod(crashHelper, 0o700);
     process.env.BOXES_SPICE_HELPER = crashHelper;
     await expect(callSpiceHelper(operation)).rejects.toMatchObject({ code: "SPICE_UNAVAILABLE" });
+  });
+
+  it("cancels a pending request by terminating the helper and starts a fresh helper afterward", async () => {
+    tempDirectory = await mkdtemp(join("/tmp", "boxes-mcp-spice-test-"));
+    const helper = join(tempDirectory, "recover.sh");
+    const marker = join(tempDirectory, "first-run");
+    await writeFile(helper, `#!/bin/sh
+if [ ! -e "$BOXES_TEST_MARKER" ]; then
+  touch "$BOXES_TEST_MARKER"
+  IFS= read -r request
+  sleep 5
+fi
+while IFS= read -r request; do
+  id=$(printf '%s' "$request" | sed -n 's/.*"id":"\\([^\"]*\\)".*/\\1/p')
+  printf '{"version":1,"id":"%s","ok":true,"result":{"recovered":true}}\\n' "$id"
+done
+`);
+    await chmod(helper, 0o700);
+    process.env.BOXES_SPICE_HELPER = helper;
+    process.env.BOXES_TEST_MARKER = marker;
+    const controller = new AbortController();
+    const operation = {
+      operation: "status" as const,
+      domain: "vm",
+      display: { display: "spice://127.0.0.1:5900", protocol: "spice" as const },
+      arguments: {}
+    };
+    const pending = callSpiceHelper(operation, { signal: controller.signal });
+    controller.abort();
+    await expect(pending).rejects.toMatchObject({ code: "OPERATION_CANCELLED" });
+    await expect(callSpiceHelper(operation)).resolves.toEqual({ recovered: true });
   });
 
   it("rejects oversized helper frames", async () => {

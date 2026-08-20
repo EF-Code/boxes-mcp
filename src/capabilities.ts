@@ -101,7 +101,11 @@ export async function discoverCapabilities(
         ? { state: "configured" }
         : { state: "unconfigured", reason: "A reviewed executable and SPICE display are required" },
       clipboard: spiceStatus
-        ? spiceStatus.clipboard ? { state: "connected" } : { state: "agent-disconnected", reason: "The SPICE guest agent does not announce clipboard capability" }
+        ? spiceStatus.clipboard
+          ? { state: "connected" }
+          : spiceStatus.agentConnected
+          ? { state: "capability-missing", reason: "The connected SPICE guest agent does not announce clipboard capability" }
+          : { state: "agent-disconnected", reason: "The SPICE guest agent is not connected" }
         : spiceProbeError?.code === "SPICE_AGENT_DISCONNECTED"
         ? { state: "agent-disconnected", reason: spiceProbeError.message }
         : spiceProbeError

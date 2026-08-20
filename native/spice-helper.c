@@ -58,6 +58,7 @@ struct _HelperState {
     gboolean main_open;
     gboolean inputs_open;
     gboolean display_open;
+    gboolean session_needs_reconnect;
     gboolean agent_connected;
     gint display_width;
     gint display_height;
@@ -215,6 +216,7 @@ static void clear_session(HelperState *state) {
     state->main_open = FALSE;
     state->inputs_open = FALSE;
     state->display_open = FALSE;
+    state->session_needs_reconnect = FALSE;
     state->agent_connected = FALSE;
     state->display_width = 0;
     state->display_height = 0;
@@ -230,6 +232,7 @@ static void channel_event_cb(SpiceChannel *channel, SpiceChannelEvent event, gpo
     if (type == SPICE_CHANNEL_INPUTS) state->inputs_open = open;
     if (type == SPICE_CHANNEL_DISPLAY) state->display_open = open;
     if (event == SPICE_CHANNEL_CLOSED || event >= SPICE_CHANNEL_ERROR_CONNECT) {
+        state->session_needs_reconnect = TRUE;
         if (state->active != NULL) request_fail(state->active, "SPICE_UNAVAILABLE", "SPICE channel disconnected");
     }
 }
@@ -263,10 +266,12 @@ static void channel_open_fd_cb(SpiceChannel *channel, gint with_tls, gpointer us
     }
     fd = virDomainOpenGraphicsFD(state->libvirt_domain, 0, 0);
     if (fd < 0) {
+        state->session_needs_reconnect = TRUE;
         if (state->active != NULL) request_fail(state->active, "SPICE_UNAVAILABLE", "Unable to open a libvirt graphics FD");
         return;
     }
     if (!spice_channel_open_fd(channel, fd)) {
+        state->session_needs_reconnect = TRUE;
         close(fd);
         if (state->active != NULL) request_fail(state->active, "SPICE_UNAVAILABLE", "Unable to attach the SPICE channel graphics FD");
     }
@@ -301,7 +306,7 @@ static void channel_new_cb(SpiceSession *session, SpiceChannel *channel, gpointe
 
 static gboolean ensure_session(HelperState *state, const gchar *domain, const gchar *uri, const gchar *transport) {
     if (state->session != NULL && g_strcmp0(state->domain, domain) == 0 && g_strcmp0(state->uri, uri) == 0
-        && g_strcmp0(state->transport, transport) == 0) {
+        && g_strcmp0(state->transport, transport) == 0 && !state->session_needs_reconnect) {
         return TRUE;
     }
     clear_session(state);
@@ -413,7 +418,7 @@ static JsonNode *status_result(HelperState *state) {
     json_builder_set_member_name(builder, "mainChannel"); json_builder_add_string_value(builder, state->main_open ? "connected" : "disconnected");
     json_builder_set_member_name(builder, "inputsChannel"); json_builder_add_string_value(builder, state->inputs_open ? "connected" : "disconnected");
     json_builder_set_member_name(builder, "displayChannel"); json_builder_add_string_value(builder, state->display_open ? "connected" : "disconnected");
-    json_builder_set_member_name(builder, "agentConnected"); json_builder_add_boolean_value(builder, state->agent_connected || clipboard);
+    json_builder_set_member_name(builder, "agentConnected"); json_builder_add_boolean_value(builder, state->agent_connected || clipboard || file_transfer);
     json_builder_set_member_name(builder, "clipboard"); json_builder_add_boolean_value(builder, clipboard);
     json_builder_set_member_name(builder, "fileTransfer"); json_builder_add_boolean_value(builder, file_transfer);
     json_builder_set_member_name(builder, "mouseMode"); json_builder_add_int_value(builder, mouse_mode);
@@ -579,9 +584,12 @@ static gboolean do_clipboard(HelperState *state, Request *request, JsonObject *a
     guint64 max_bytes = bounded_member(args, "maxBytes", DEFAULT_MAX_CLIPBOARD_BYTES, 100u * 1024u * 1024u);
     guint64 timeout_ms = bounded_member(args, "timeoutMs", DEFAULT_TIMEOUT_MS, 120000u);
     guint32 type = VD_AGENT_CLIPBOARD_UTF8_TEXT;
-    if (!wait_for_channels(state, FALSE, DEFAULT_TIMEOUT_MS) || state->main_channel == NULL
-        || !spice_main_channel_agent_test_capability(state->main_channel, VD_AGENT_CAP_CLIPBOARD)) {
-        request_fail(request, "SPICE_AGENT_DISCONNECTED", "SPICE guest agent clipboard capability is unavailable");
+    if (!wait_for_channels(state, FALSE, DEFAULT_TIMEOUT_MS) || state->main_channel == NULL || !state->main_open) {
+        request_fail(request, "SPICE_AGENT_DISCONNECTED", "SPICE guest agent is not connected");
+        return FALSE;
+    }
+    if (!spice_main_channel_agent_test_capability(state->main_channel, VD_AGENT_CAP_CLIPBOARD)) {
+        request_fail(request, "SPICE_CAPABILITY_MISSING", "SPICE guest agent does not announce clipboard capability");
         return FALSE;
     }
     request->clipboard_max_bytes = max_bytes;
@@ -635,9 +643,12 @@ static gboolean do_file_transfer(HelperState *state, Request *request, JsonObjec
     GFile *sources[2] = { NULL, NULL };
     GFileInfo *info;
     GError *error = NULL;
-    if (!wait_for_channels(state, FALSE, DEFAULT_TIMEOUT_MS) || state->main_channel == NULL
-        || spice_main_channel_agent_test_capability(state->main_channel, VD_AGENT_CAP_FILE_XFER_DISABLED)) {
-        request_fail(request, "SPICE_CAPABILITY_MISSING", "SPICE guest agent file transfer capability is unavailable");
+    if (!wait_for_channels(state, FALSE, DEFAULT_TIMEOUT_MS) || state->main_channel == NULL || !state->main_open) {
+        request_fail(request, "SPICE_AGENT_DISCONNECTED", "SPICE guest agent is not connected");
+        return FALSE;
+    }
+    if (spice_main_channel_agent_test_capability(state->main_channel, VD_AGENT_CAP_FILE_XFER_DISABLED)) {
+        request_fail(request, "SPICE_CAPABILITY_MISSING", "SPICE guest agent does not announce file transfer capability");
         return FALSE;
     }
     if (source_path == NULL || source_path[0] == '\0' || strpbrk(source_path, "\r\n") != NULL) {

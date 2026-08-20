@@ -205,6 +205,7 @@ interface PendingRequest {
   resolve: (value: unknown) => void;
   reject: (error: unknown) => void;
   timer: NodeJS.Timeout;
+  abortCleanup?: () => void;
 }
 
 type SpiceChild = ChildProcessByStdio<Writable, Readable, null>;
@@ -219,7 +220,7 @@ export class SpiceHelperClient {
 
   public constructor(private readonly maxLineBytes = MAX_HELPER_LINE_BYTES) {}
 
-  public async request(operation: SpiceOperation): Promise<unknown> {
+  public async request(operation: SpiceOperation, options: { signal?: AbortSignal } = {}): Promise<unknown> {
     const helper = spiceHelperPath();
     if (!helper) throw new BoxesError("SPICE_UNAVAILABLE", "BOXES_SPICE_HELPER is not configured or executable");
     if (!operation.domain || operation.display.protocol !== "spice") {
@@ -248,14 +249,26 @@ export class SpiceHelperClient {
     const timeoutMs = operationTimeoutMs(operation);
 
     return await new Promise((resolve, reject) => {
+      if (options.signal?.aborted) {
+        reject(new BoxesError("OPERATION_CANCELLED", "SPICE helper operation was cancelled before submission"));
+        return;
+      }
       const timer = setTimeout(() => {
         this.failChild(new BoxesError("OPERATION_TIMEOUT", "SPICE helper operation timed out"));
       }, timeoutMs);
-      this.pending.set(id, { resolve, reject, timer });
+      const onAbort = () => {
+        this.failChild(new BoxesError("OPERATION_CANCELLED", "SPICE helper operation was cancelled"));
+      };
+      const abortCleanup = options.signal
+        ? () => options.signal?.removeEventListener("abort", onAbort)
+        : undefined;
+      this.pending.set(id, { resolve, reject, timer, abortCleanup });
+      options.signal?.addEventListener("abort", onAbort, { once: true });
       try {
         child.stdin.write(`${line}\n`);
       } catch (error) {
         clearTimeout(timer);
+        abortCleanup?.();
         this.pending.delete(id);
         reject(responseError("Unable to write to the SPICE helper", error));
       }
@@ -279,8 +292,11 @@ export class SpiceHelperClient {
     this.frameBuffer = "";
     child.stdout.setEncoding("utf8");
     child.stdout.on("data", chunk => this.consume(chunk as string));
-    child.on("error", error => this.failChild(responseError("SPICE helper failed", error)));
+    child.on("error", error => {
+      if (this.child === child) this.failChild(responseError("SPICE helper failed", error));
+    });
     child.on("exit", (code, signal) => {
+      if (this.child !== child) return;
       this.child = undefined;
       this.childPath = undefined;
       if (this.pending.size > 0) {
@@ -338,6 +354,7 @@ export class SpiceHelperClient {
     if (!pending) return;
     this.pending.delete(response.id);
     clearTimeout(pending.timer);
+    pending.abortCleanup?.();
     if (response.ok) pending.resolve(response.result);
     else pending.reject(helperError(response));
   }
@@ -345,6 +362,7 @@ export class SpiceHelperClient {
   private failPending(error: BoxesError): void {
     for (const [id, pending] of this.pending) {
       clearTimeout(pending.timer);
+      pending.abortCleanup?.();
       this.pending.delete(id);
       pending.reject(error);
     }
@@ -373,8 +391,8 @@ function client(): SpiceHelperClient {
   return sharedClient;
 }
 
-export async function callSpiceHelper(operation: SpiceOperation): Promise<unknown> {
-  return await client().request(operation);
+export async function callSpiceHelper(operation: SpiceOperation, options: { signal?: AbortSignal } = {}): Promise<unknown> {
+  return await client().request(operation, options);
 }
 
 export async function spiceHelperStatus(domain: string, display: DisplayEndpoint): Promise<SpiceStatusResult> {

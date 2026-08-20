@@ -15,6 +15,7 @@ export type BoxesErrorCode =
   | "CLIPBOARD_TOO_LARGE"
   | "TRANSFER_PATH_DENIED"
   | "TRANSFER_TOO_LARGE"
+  | "OPERATION_CANCELLED"
   | "OPERATION_TIMEOUT";
 
 /** Error with a stable code suitable for MCP clients and tests. */
