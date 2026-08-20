@@ -7,7 +7,7 @@ import { requireRunningDomain } from "./libvirt.js";
 import { sh } from "./exec.js";
 import { VIRSH, commonArgs } from "./virsh.js";
 
-export type ScreenshotBackend = "auto" | "libvirt" | "spice" | "guest";
+export type ScreenshotBackend = "auto" | "libvirt";
 
 export interface ScreenshotRequest {
   nameOrUuid: string;
@@ -32,8 +32,50 @@ export function parseScreenshotRequest(value: unknown): ScreenshotRequest {
   return {
     nameOrUuid: requireNameOrUuid(args),
     screen: boundedInteger(args.screen, "screen", 0, 16, 0),
-    backend: enumValue(args.backend, "backend", ["auto", "libvirt", "spice", "guest"] as const, "INVALID_ARGUMENT", "auto")
+    backend: enumValue(args.backend, "backend", ["auto", "libvirt"] as const, "INVALID_ARGUMENT", "auto")
   };
+}
+
+function ppmTokenize(data: Buffer): string[] {
+  const header = data.subarray(0, Math.min(data.length, 64 * 1024)).toString("ascii");
+  const tokens: string[] = [];
+  let index = 0;
+  while (index < header.length && tokens.length < 4) {
+    while (index < header.length && /\s/.test(header[index])) index += 1;
+    if (header[index] === "#") {
+      while (index < header.length && header[index] !== "\n") index += 1;
+      continue;
+    }
+    const start = index;
+    while (index < header.length && !/\s/.test(header[index]) && header[index] !== "#") index += 1;
+    if (index === start) break;
+    tokens.push(header.slice(start, index));
+  }
+  return tokens;
+}
+
+function ppmType(data: Buffer): { mimeType: string; width: number; height: number } {
+  const tokens = ppmTokenize(data);
+  const magic = tokens[0];
+  if (!magic || !/^P[1-6]$/.test(magic) || tokens.length < 3) {
+    throw new BoxesError("BACKEND_UNAVAILABLE", "The screenshot contains a malformed PPM header");
+  }
+  const width = Number(tokens[1]);
+  const height = Number(tokens[2]);
+  if (!Number.isInteger(width) || !Number.isInteger(height) || width < 1 || height < 1
+    || width > 1_000_000 || height > 1_000_000) {
+    throw new BoxesError("BACKEND_UNAVAILABLE", "The screenshot contains invalid PPM dimensions");
+  }
+  if (magic !== "P1" && magic !== "P4" && tokens.length < 4) {
+    throw new BoxesError("BACKEND_UNAVAILABLE", "The screenshot contains a malformed PPM max value");
+  }
+  if (magic !== "P1" && magic !== "P4") {
+    const maxValue = Number(tokens[3]);
+    if (!Number.isInteger(maxValue) || maxValue < 1 || maxValue > 65535) {
+      throw new BoxesError("BACKEND_UNAVAILABLE", "The screenshot contains an invalid PPM max value");
+    }
+  }
+  return { mimeType: "image/x-portable-pixmap", width, height };
 }
 
 function imageType(data: Buffer): { mimeType: string; width?: number; height?: number } {
@@ -53,18 +95,20 @@ function imageType(data: Buffer): { mimeType: string; width?: number; height?: n
       height: data.length >= 26 ? Math.abs(data.readInt32LE(22)) : undefined
     };
   }
-  const header = data.subarray(0, 32).toString("ascii");
-  if (/^P[123456]\s/.test(header)) return { mimeType: "image/x-portable-pixmap" };
+  const header = data.subarray(0, 2).toString("ascii");
+  if (/^P[123456]$/.test(header)) return ppmType(data);
   throw new BoxesError("BACKEND_UNAVAILABLE", "The screenshot format is not supported by MCP");
+}
+
+function isTimeout(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const candidate = error as { code?: unknown; killed?: unknown };
+  return candidate.code === "ETIMEDOUT" || candidate.killed === true;
 }
 
 export async function captureScreenshot(value: unknown): Promise<ScreenshotResult> {
   const request = parseScreenshotRequest(value);
   await requireRunningDomain(request.nameOrUuid);
-  if (request.backend === "spice" || request.backend === "guest") {
-    throw new BoxesError("BACKEND_UNAVAILABLE", `${request.backend} screenshot backend is not available`);
-  }
-
   const maxBytes = parseEnvironmentInteger(
     "BOXES_MAX_SCREENSHOT_BYTES",
     DEFAULT_MAX_BYTES,
@@ -94,6 +138,9 @@ export async function captureScreenshot(value: unknown): Promise<ScreenshotResul
       throw new BoxesError("ARTIFACT_TOO_LARGE", `Screenshot exceeds ${maxBytes} bytes`);
     }
     const data = await readFile(outputPath);
+    if (data.length > maxBytes) {
+      throw new BoxesError("ARTIFACT_TOO_LARGE", `Screenshot exceeds ${maxBytes} bytes`);
+    }
     const type = imageType(data);
     return {
       data: data.toString("base64"),
@@ -106,6 +153,9 @@ export async function captureScreenshot(value: unknown): Promise<ScreenshotResul
     };
   } catch (error) {
     if (error instanceof BoxesError) throw error;
+    if (isTimeout(error)) {
+      throw new BoxesError("OPERATION_TIMEOUT", "Screenshot capture timed out", { cause: error });
+    }
     throw new BoxesError("BACKEND_UNAVAILABLE", "Unable to capture the domain screenshot", { cause: error });
   } finally {
     await rm(tempDir, { recursive: true, force: true });
