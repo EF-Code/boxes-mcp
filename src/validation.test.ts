@@ -20,6 +20,7 @@ describe("validation coordinates", () => {
       width: 100,
       height: 200
     });
+    expect(() => parseCoordinates({ x: 10.5, y: 20, coordinateSpace: "pixels", width: 100, height: 200 })).toThrow(BoxesError);
   });
 
   it("rejects non-finite or out-of-range normalized values", () => {

@@ -27,7 +27,7 @@ describe("capability discovery", () => {
   });
 
   it("reports structured display and helper-backed capabilities", async () => {
-    vi.mocked(qmp.probeQmp).mockResolvedValue();
+    vi.mocked(qmp.probeQmp).mockResolvedValue({ absolute: true });
     await expect(discoverCapabilities("vm", { probeQmp: true })).resolves.toMatchObject({
       display: { protocol: "spice", host: "127.0.0.1", port: 5900 },
       domain: { domainType: "kvm", hasSpiceAgentChannel: true, hasAbsolutePointer: true },

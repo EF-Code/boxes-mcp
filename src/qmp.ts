@@ -7,7 +7,7 @@ export type QmpButton = "left" | "middle" | "right" | "wheel-up" | "wheel-down" 
 
 export interface QmpInputEvent {
   type: "abs" | "btn";
-  data: Record<string, unknown>;
+  data: { axis: "x" | "y"; value: number } | { button: QmpButton; down: boolean };
 }
 
 export interface QmpResponse {
@@ -67,15 +67,17 @@ export async function qmpExecute(
   return response.return;
 }
 
-export async function probeQmp(nameOrUuid: string): Promise<void> {
+export async function probeQmp(nameOrUuid: string): Promise<QmpMouseDevice> {
   const commands = await queryQmpCommands(nameOrUuid);
   if (!commands.some(command => command.name === "input-send-event")) {
     throw new BoxesError("QMP_COMMAND_UNSUPPORTED", "QMP does not support input-send-event");
   }
   const devices = await queryQmpMice(nameOrUuid);
-  if (!devices.some(device => device.absolute === true)) {
+  const device = devices.find(candidate => candidate.absolute === true);
+  if (!device) {
     throw new BoxesError("QMP_COMMAND_UNSUPPORTED", "QMP has no absolute pointer device");
   }
+  return device;
 }
 
 export async function queryQmpCommands(nameOrUuid: string): Promise<QmpCommandInfo[]> {
@@ -93,12 +95,17 @@ export async function queryQmpMice(nameOrUuid: string): Promise<QmpMouseDevice[]
 }
 
 export function absoluteCoordinate(value: number, maximum = 0x7fff): number {
+  if (!Number.isFinite(value) || value < 0 || value > 1) {
+    throw new BoxesError("INVALID_COORDINATES", "Normalized coordinates must be finite and between 0 and 1");
+  }
   return normalizedCoordinate(value, maximum);
 }
 
 export function pixelCoordinate(value: number, size: number, maximum = 0x7fff): number {
-  if (size <= 0) throw new BoxesError("INVALID_COORDINATES", "Coordinate dimensions must be positive");
-  return Math.round(Math.min(size, Math.max(0, value)) / size * maximum);
+  if (!Number.isInteger(value) || !Number.isInteger(size) || size <= 0 || value < 0 || value > size) {
+    throw new BoxesError("INVALID_COORDINATES", "Pixel coordinates must be integers within their dimensions");
+  }
+  return Math.round(value / size * maximum);
 }
 
 export function qmpButton(button: QmpButton): QmpButton {
@@ -106,6 +113,8 @@ export function qmpButton(button: QmpButton): QmpButton {
 }
 
 export async function sendQmpInput(nameOrUuid: string, events: QmpInputEvent[]): Promise<void> {
-  if (events.length === 0) throw new BoxesError("INVALID_ARGUMENT", "At least one QMP input event is required");
+  if (events.length === 0 || events.length > 64) {
+    throw new BoxesError("INVALID_ARGUMENT", "QMP input event batches must contain between 1 and 64 events");
+  }
   await qmpExecute(nameOrUuid, "input-send-event", { events });
 }

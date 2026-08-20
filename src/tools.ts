@@ -177,7 +177,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       additionalProperties: false,
       properties: {
         nameOrUuid: domainProperty,
-        action: { type: "string", enum: ["move", "buttonDown", "buttonUp", "click", "scroll"] },
+        action: { type: "string", enum: ["move", "click", "scroll"] },
         x: { type: "number", minimum: 0 },
         y: { type: "number", minimum: 0 },
         coordinateSpace: { type: "string", enum: ["normalized", "pixels"], default: "normalized" },
@@ -188,7 +188,12 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
         deltaY: { type: "integer", minimum: -8, maximum: 8, default: 0 },
         backend: { type: "string", enum: ["auto", "qmp", "spice"], default: "auto" }
       },
-      required: ["nameOrUuid", "action", "x", "y"]
+      required: ["nameOrUuid", "action", "x", "y"],
+      oneOf: [
+        { properties: { action: { const: "move" } }, required: ["action"] },
+        { properties: { action: { const: "click" }, button: { type: "string", enum: ["left", "middle", "right"] } }, required: ["action", "button"] },
+        { properties: { action: { const: "scroll" } }, required: ["action"] }
+      ]
     }
   },
   {

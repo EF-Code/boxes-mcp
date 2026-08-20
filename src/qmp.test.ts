@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as exec from "./exec.js";
-import { absoluteCoordinate, pixelCoordinate, qmpExecute } from "./qmp.js";
+import { absoluteCoordinate, pixelCoordinate, probeQmp, qmpExecute, sendQmpInput } from "./qmp.js";
 
 vi.mock("./exec.js");
 
@@ -22,7 +22,7 @@ describe("QMP adapter", () => {
       .mockResolvedValueOnce({ stdout: '{"return":[{"name":"input-send-event"}]}', stderr: "" })
       .mockResolvedValueOnce({ stdout: '{"return":[{"name":"tablet","absolute":true}]}', stderr: "" });
     const { probeQmp } = await import("./qmp.js");
-    await expect(probeQmp("vm")).resolves.toBeUndefined();
+    await expect(probeQmp("vm")).resolves.toMatchObject({ absolute: true });
     expect(vi.mocked(exec.sh)).toHaveBeenCalledTimes(2);
   });
 
@@ -37,5 +37,15 @@ describe("QMP adapter", () => {
   it("rejects malformed QMP output", async () => {
     vi.mocked(exec.sh).mockResolvedValueOnce({ stdout: "not-json", stderr: "" });
     await expect(qmpExecute("vm", "query-mice")).rejects.toMatchObject({ code: "QMP_UNAVAILABLE" });
+  });
+
+  it("requires an absolute pointer and bounds event batches", async () => {
+    vi.mocked(exec.sh)
+      .mockResolvedValueOnce({ stdout: '{"return":[{"name":"input-send-event"}]}', stderr: "" })
+      .mockResolvedValueOnce({ stdout: '{"return":[{"name":"relative","absolute":false}]}', stderr: "" });
+    await expect(probeQmp("vm")).rejects.toMatchObject({ code: "QMP_COMMAND_UNSUPPORTED" });
+    expect(() => pixelCoordinate(1.5, 2)).toThrow();
+    await expect(sendQmpInput("vm", Array(65).fill({ type: "abs", data: { axis: "x", value: 1 } })))
+      .rejects.toMatchObject({ code: "INVALID_ARGUMENT" });
   });
 });
