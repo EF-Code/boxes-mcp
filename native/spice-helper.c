@@ -16,6 +16,7 @@
 #define DEFAULT_MAX_CLIPBOARD_BYTES (1024u * 1024u)
 #define DEFAULT_MAX_TRANSFER_BYTES (100u * 1024u * 1024u)
 #define DEFAULT_TIMEOUT_MS 30000u
+#define STATUS_TIMEOUT_MS 2500u
 
 typedef struct _HelperState HelperState;
 typedef struct _Request Request;
@@ -35,6 +36,8 @@ struct _Request {
     guint64 total_bytes;
     gboolean drag_transfer_completed;
     gboolean drag_mouse_released;
+    gboolean transfer_pending;
+    guint refs;
     GCancellable *cancellable;
     GFile *source;
 };
@@ -168,6 +171,11 @@ static void request_succeed(Request *request) {
     request->done = TRUE;
 }
 
+static Request *request_ref(Request *request) {
+    if (request != NULL) request->refs++;
+    return request;
+}
+
 static void request_free(Request *request) {
     if (request == NULL) return;
     g_free(request->id);
@@ -178,6 +186,12 @@ static void request_free(Request *request) {
     g_clear_object(&request->cancellable);
     g_clear_object(&request->source);
     g_free(request);
+}
+
+static void request_unref(Request *request) {
+    if (request == NULL || request->refs == 0) return;
+    request->refs--;
+    if (request->refs == 0) request_free(request);
 }
 
 static void clear_session(HelperState *state) {
@@ -361,9 +375,29 @@ static guint64 bounded_member(JsonObject *object, const gchar *name, guint64 fal
 }
 
 static gboolean wait_for_channels(HelperState *state, gboolean need_inputs, guint timeout_ms) {
+    gint64 end;
     if (state->main_open && (!need_inputs || state->inputs_open)) return TRUE;
-    pump_for(state, timeout_ms);
+    end = g_get_monotonic_time() + ((gint64) timeout_ms * 1000);
+    while (g_get_monotonic_time() < end && !(state->main_open && (!need_inputs || state->inputs_open))) {
+        while (g_main_context_pending(NULL)) g_main_context_iteration(NULL, FALSE);
+        if (state->main_open && (!need_inputs || state->inputs_open)) break;
+        g_usleep(10000);
+    }
     return state->main_open && (!need_inputs || state->inputs_open);
+}
+
+static gboolean wait_for_status(HelperState *state, guint timeout_ms) {
+    gint64 end = g_get_monotonic_time() + ((gint64) timeout_ms * 1000);
+    while (g_get_monotonic_time() < end
+           && !(state->main_open && state->inputs_open && state->display_open
+                && state->display_width > 0 && state->display_height > 0)) {
+        while (g_main_context_pending(NULL)) g_main_context_iteration(NULL, FALSE);
+        if (state->main_open && state->inputs_open && state->display_open
+            && state->display_width > 0 && state->display_height > 0) break;
+        g_usleep(10000);
+    }
+    return state->main_open && state->inputs_open && state->display_open
+        && state->display_width > 0 && state->display_height > 0;
 }
 
 static JsonNode *status_result(HelperState *state) {
@@ -589,7 +623,9 @@ static void file_copy_done_cb(GObject *source_object, GAsyncResult *result, gpoi
     } else {
         request_fail(request, "SPICE_UNAVAILABLE", error != NULL ? error->message : "SPICE file transfer failed");
     }
+    request->transfer_pending = FALSE;
     g_clear_error(&error);
+    request_unref(request);
 }
 
 static gboolean do_file_transfer(HelperState *state, Request *request, JsonObject *args) {
@@ -625,6 +661,8 @@ static gboolean do_file_transfer(HelperState *state, Request *request, JsonObjec
     request->total_bytes = (guint64) g_file_info_get_size(info);
     g_clear_object(&info);
     request->cancellable = g_cancellable_new();
+    request->transfer_pending = TRUE;
+    request_ref(request);
     sources[0] = request->source;
     spice_main_channel_file_copy_async(state->main_channel, sources, G_FILE_COPY_NONE, request->cancellable,
                                        file_progress_cb, request, file_copy_done_cb, request);
@@ -789,9 +827,10 @@ static void handle_line(HelperState *state, const gchar *line) {
     request->state = state;
     request->id = g_strdup(id);
     request->operation = g_strdup(operation);
+    request->refs = 1;
     state->active = request;
     if (g_strcmp0(operation, "status") == 0) {
-        pump_for(state, 1000);
+        wait_for_status(state, STATUS_TIMEOUT_MS);
         request_succeed(request);
         success = TRUE;
     } else if (g_strcmp0(operation, "mouse") == 0) {
@@ -813,7 +852,7 @@ static void handle_line(HelperState *state, const gchar *line) {
         emit_error(request->id, request->error_code, request->error_message);
     }
     state->active = NULL;
-    request_free(request);
+    request_unref(request);
     g_object_unref(parser);
 }
 

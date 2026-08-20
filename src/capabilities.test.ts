@@ -64,7 +64,7 @@ describe("capability discovery", () => {
     });
     await expect(discoverCapabilities("vm", { probeSpice: true })).resolves.toMatchObject({
       backends: {
-        spice: { state: "connecting" },
+        spice: { state: "connecting", reason: "SPICE main, inputs, and display channels are not all connected" },
         clipboard: { state: "agent-disconnected" },
         fileTransfer: { state: "capability-missing" }
       }

@@ -92,7 +92,9 @@ export async function discoverCapabilities(
     backends: {
       qmp,
       spice: spiceStatus
-        ? { state: spiceStatus.mainChannel === "connected" && spiceStatus.displayChannel === "connected" && spiceStatus.inputsChannel === "connected" ? "connected" : "connecting" }
+        ? spiceStatus.mainChannel === "connected" && spiceStatus.displayChannel === "connected" && spiceStatus.inputsChannel === "connected"
+          ? { state: "connected" }
+          : { state: "connecting", reason: "SPICE main, inputs, and display channels are not all connected" }
         : spiceProbeError
         ? { state: "capability-missing", reason: spiceProbeError.message }
         : spiceConfigured
