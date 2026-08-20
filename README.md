@@ -33,7 +33,11 @@ separate, evidence-backed providers rather than inferred from the libvirt implem
 - `virsh` available on `PATH` for lifecycle, screenshot, keyboard, and QMP fallback operations
 
 SPICE-backed tools additionally require a SPICE display, a guest virtio-serial agent
-channel, and a running `spice-vdagent` (or equivalent guest agent). Build the optional
+channel, and a running `spice-vdagent` (or equivalent guest agent). Clipboard support
+also depends on the guest desktop integration supplied by that agent. The standard
+`spice-vdagent` session component is X11-oriented; a Wayland/Hyprland guest may have
+the package and service running while still reporting `capability-missing` for
+clipboard. Build the optional
 native helper only when the host provides `spice-client-glib`, `json-glib`, and GLib
 development files. For libvirt domains whose graphics XML uses `listen type='none'`,
 the helper uses libvirt's local graphics-FD API; no `remote-viewer`, `virt-viewer`, or
@@ -253,9 +257,9 @@ npm run test:integration
 ```
 
 The live suite never selects a listed VM, changes VM definitions, or stops a guest
-service. Guest-agent disconnect coverage requires the operator to manually disconnect
-`spice-vdagent` in the explicitly disposable guest and add
-`BOXES_TEST_AGENT_DISCONNECTED=1`.
+service itself. Guest-agent disconnect coverage requires the operator to manually
+disconnect `spice-vdagent` in the explicitly disposable guest and add
+`BOXES_TEST_AGENT_DISCONNECTED=1`; never do this to a non-disposable guest.
 
 The default suite is mocked/local: it does not prove that QMP, SPICE, clipboard,
 or drag-and-drop works against a real VM. Live tests must be opt-in and target a
@@ -402,8 +406,14 @@ Use `boxes.capabilities` with `probeSpice: true` and inspect the returned state:
 For example, a connected guest agent that supports file transfer but does not announce
 clipboard is `capability-missing`, not `agent-disconnected`. To enable clipboard, the
 guest must have its distribution's `spice-vdagent` service installed, running in the
-desktop session, and connected through the virtio SPICE agent channel. The server does
-not install guest packages or start guest services automatically.
+desktop session, and connected through the virtio SPICE agent channel. On a
+Wayland/Hyprland desktop, verify that the distro's agent actually supports that
+compositor; an active service alone is not proof. The live Omarchy guest had
+`spice-vdagent 0.23.0-1` and an active user service, but logged `xrandr output ID NOT
+FOUND` and no owner for `org.gnome.Mutter.DisplayConfig`, so boxes-mcp correctly
+returned `SPICE_CAPABILITY_MISSING`. Use an X11 guest session for the current
+upstream agent, or provide a separately validated Wayland clipboard bridge. The
+server does not install guest packages or start guest services automatically.
 
 The persistent SPICE client also accepts an abort signal. Cancellation terminates the
 current helper process, fails all pending operations deterministically, and allows the

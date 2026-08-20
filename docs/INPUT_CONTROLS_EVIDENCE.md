@@ -24,6 +24,8 @@ Transfer and drag evidence additionally require `BOXES_TRANSFER_ROOT` and
 `BOXES_TEST_SOURCE_PATH`. Guest-agent-disconnect coverage requires an operator to
 manually disconnect `spice-vdagent` in that disposable guest and set
 `BOXES_TEST_AGENT_DISCONNECTED=1`; the harness never stops a guest service itself.
+Any manual service stop is limited to the explicitly disposable guest and must be
+restored after the negative-path test.
 
 ## Request and response examples
 
@@ -220,10 +222,10 @@ accepted the drop. A real viewer/desktop harness is required to change
 | Persistent TypeScript helper | `src/spice.ts`, `src/spice.test.ts` | Local persistent fake helper, correlation, cancellation, crash, timeout, malformed/oversized frames | Real SPICE endpoint through persistent status/mouse/transfer requests; helper restart recovered status | VERIFIED for process restart; guest reconnect remains unverified |
 | Native helper framing/session | `native/spice-helper.c`, `src/native-helper.test.ts` | Native compile and local process malformed/status failure checks | Real libvirt graphics-FD SPICE session | VERIFIED |
 | SPICE mouse | Native inputs channel and `src/mouse.ts` | Typed status/result validation and source build | Real inputs channel; auto move plus explicit click/scroll completed at 1280x800 | VERIFIED |
-| Guest-agent clipboard | Native agent callbacks, `src/clipboard.ts`, `src/clipboard.test.ts` | Reducer fixtures and helper protocol failure boundary | Omarchy agent connected and file-transfer-capable, but clipboard capability was not announced; round-trip unavailable | BLOCKED-LIVE |
-| SPICE file transfer | Native async file-copy path, `src/transfer.ts`, `src/transfer.test.ts` | Path confinement, exact completion validation, native build | 46-byte confined fixture completed through disposable Omarchy SPICE transfer | VERIFIED for transport; destination semantics unverified |
+| Guest-agent clipboard | Native agent callbacks, `src/clipboard.ts`, `src/clipboard.test.ts` | Reducer fixtures and helper protocol failure boundary | Omarchy `spice-vdagent 0.23.0-1` was installed and active, but the Wayland session did not announce clipboard; direct read returned `SPICE_CAPABILITY_MISSING` | BLOCKED-LIVE |
+| SPICE file transfer | Native async file-copy path, `src/transfer.ts`, `src/transfer.test.ts` | Path confinement, exact completion validation, native build | 18,682-byte confined `README.md` completed through disposable Omarchy SPICE transfer | VERIFIED for transport; destination semantics unverified |
 | Drag/drop | Native coordinator, `src/drag-drop.ts`, `src/drag-drop.test.ts` | State/evidence fixtures and cleanup path | Live transfer and pointer release observed; application acceptance remained `unknown` | IMPLEMENTED-UNVERIFIED-LIVE |
-| Opt-in harness | `src/integration.test.ts` | Safe default: 9 live tests skipped | Explicit Omarchy VM: 7 passed, 2 honest skips | VERIFIED |
+| Opt-in harness | `src/integration.test.ts` | Safe default: 9 live tests skipped | Explicit Omarchy VM: 7 passed, 2 honest skips; clipboard capability and full agent disconnect remained unavailable | VERIFIED |
 
 ## Current live-boundary result
 
@@ -231,9 +233,14 @@ The live runs used explicitly named, explicitly disposable domains on
 `qemu:///session`:
 
 - `ubuntu24.04`, title `Kali`, Boxes `os-state=live`, attached Kali Live ISO;
-- `archlinux`, title `Omarchy`, Boxes `os-state=installed`, attached Omarchy 4.0.0 ISO.
+- `archlinux`, title `Omarchy`, Boxes `os-state=installed`, attached Omarchy 4.0.0 ISO;
+  the active user session reported `Type=wayland`.
 
-No VM definition was changed and no guest service was stopped.
+No VM definition was changed. The harness did not stop a guest service. For the
+required negative-path check, the disposable guest's user session agent was stopped
+manually and then restored; the system agent remained connected for file transfer, so
+the result correctly remained `capability-missing` rather than being mislabelled as a
+fully disconnected agent.
 
 Environment and dependency evidence:
 
@@ -244,6 +251,8 @@ spice-client-glib-2.0                   0.42
 json-glib-1.0                           1.10.8
 gio-unix-2.0                            2.88.3
 node/npm                                v26.7.0 / 12.0.2
+guest spice-vdagent                     0.23.0-1 (Omarchy)
+guest desktop session                   Wayland/Hyprland
 ```
 
 Observed live operations:
@@ -254,10 +263,10 @@ virsh send-key ESC                      PASS on ubuntu24.04 and archlinux
 QMP query-commands/query-mice           PASS on ubuntu24.04 and archlinux
 QMP normalized move                     PASS on ubuntu24.04 and archlinux (0.5, 0.5; backend=qmp)
 SPICE mouse                             PASS on archlinux via libvirt graphics FD; auto move, click, and scroll at 1280x800
-SPICE clipboard                         SKIPPED: guest agent does not announce clipboard capability
-SPICE file transfer                     PASS on archlinux via real async SPICE copy; 46-byte confined fixture
-drag/drop                               PASS for transfer and pointer release; application acceptance=unknown
-guest-agent disconnect                  SKIPPED: not manually staged
+SPICE clipboard                         BLOCKED-LIVE: direct read returned SPICE_CAPABILITY_MISSING; guest agent did not announce clipboard
+SPICE file transfer                     PASS on archlinux via real async SPICE copy; 18,682-byte confined README.md
+drag/drop                               PASS for transfer and pointer release; post-action screenshot captured; application acceptance=unknown
+guest-agent disconnect                  PARTIAL: user session agent was stopped/restored, but system agent remained connected; full disconnected-agent proof not obtained
 helper process restart                  PASS: status connected before and after TypeScript client/helper restart
 guest reboot reconnect                  BLOCKED: `virsh reboot archlinux` returned `domain is not running` after the VM had already shut off
 ```
