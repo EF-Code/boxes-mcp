@@ -11,7 +11,7 @@ describe('exec.sh() - Integration Tests', () => {
 
   it('should capture stderr from commands', async () => {
     // Use a command that writes to stderr
-    const result = await sh('node', ['-e', 'console.error("error message")']);
+    const result = await sh('/bin/sh', ['-c', 'printf "error message" >&2']);
 
     expect(result.stderr).toContain('error message');
   });
