@@ -106,6 +106,11 @@ export function parseDisplayEndpoint(display: string): DisplayEndpoint {
 }
 
 export async function displayEndpoint(nameOrUuid: string): Promise<DisplayEndpoint> {
-  const result = await displayAddress(nameOrUuid);
+  let result: { display: string };
+  try {
+    result = await displayAddress(nameOrUuid);
+  } catch (error) {
+    throw new BoxesError("UNSUPPORTED_DISPLAY", "The domain has no active display endpoint", { cause: error });
+  }
   return parseDisplayEndpoint(result.display);
 }

@@ -71,6 +71,20 @@ describe("capability discovery", () => {
     });
   });
 
+  it("keeps QMP discovery usable when libvirt has no display URI", async () => {
+    vi.mocked(libvirt.displayAddress).mockRejectedValue(new Error("No graphical display found"));
+    vi.mocked(qmp.probeQmp).mockResolvedValue({ absolute: true });
+
+    await expect(discoverCapabilities("vm", { probeQmp: true })).resolves.toMatchObject({
+      display: undefined,
+      backends: {
+        qmp: { state: "connected" },
+        spice: { state: "unconfigured" },
+        clipboard: { state: "capability-missing" }
+      }
+    });
+  });
+
   it("rejects an invalid domain argument before probing libvirt", async () => {
     await expect(discoverCapabilities("-vm")).rejects.toMatchObject({ code: "INVALID_ARGUMENT" });
     expect(libvirt.requireRunningDomain).not.toHaveBeenCalled();
