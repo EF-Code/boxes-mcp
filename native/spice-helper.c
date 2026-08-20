@@ -2,10 +2,12 @@
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
+#include <unistd.h>
 
 #include <gio/gio.h>
 #include <gio/gunixinputstream.h>
 #include <json-glib/json-glib.h>
+#include <libvirt/libvirt.h>
 #include <spice-client.h>
 #include <spice/vd_agent.h>
 
@@ -46,6 +48,10 @@ struct _HelperState {
     SpiceDisplayChannel *display_channel;
     gchar *domain;
     gchar *uri;
+    gchar *transport;
+    gchar *libvirt_uri;
+    virConnectPtr libvirt_connection;
+    virDomainPtr libvirt_domain;
     gboolean main_open;
     gboolean inputs_open;
     gboolean display_open;
@@ -63,6 +69,7 @@ static void clipboard_selection_cb(SpiceMainChannel *channel, guint selection, g
 static void clipboard_release_cb(SpiceMainChannel *channel, guint selection, gpointer user_data);
 static gboolean clipboard_request_cb(SpiceMainChannel *channel, guint selection, guint type,
                                      gpointer user_data);
+static void channel_open_fd_cb(SpiceChannel *channel, gint with_tls, gpointer user_data);
 
 static void emit_node(JsonNode *node) {
     JsonGenerator *generator = json_generator_new();
@@ -179,8 +186,18 @@ static void clear_session(HelperState *state) {
     g_clear_object(&state->inputs_channel);
     g_clear_object(&state->display_channel);
     g_clear_object(&state->session);
+    if (state->libvirt_domain != NULL) {
+        virDomainFree(state->libvirt_domain);
+        state->libvirt_domain = NULL;
+    }
+    if (state->libvirt_connection != NULL) {
+        virConnectClose(state->libvirt_connection);
+        state->libvirt_connection = NULL;
+    }
     g_clear_pointer(&state->domain, g_free);
     g_clear_pointer(&state->uri, g_free);
+    g_clear_pointer(&state->transport, g_free);
+    g_clear_pointer(&state->libvirt_uri, g_free);
     state->main_open = FALSE;
     state->inputs_open = FALSE;
     state->display_open = FALSE;
@@ -222,12 +239,37 @@ static void display_primary_create_cb(SpiceChannel *channel, gint format, gint w
     state->display_height = height;
 }
 
+static void channel_open_fd_cb(SpiceChannel *channel, gint with_tls, gpointer user_data) {
+    HelperState *state = user_data;
+    int fd;
+    (void) with_tls;
+    if (state->libvirt_domain == NULL) {
+        if (state->active != NULL) request_fail(state->active, "SPICE_UNAVAILABLE", "SPICE graphics FD session is unavailable");
+        return;
+    }
+    fd = virDomainOpenGraphicsFD(state->libvirt_domain, 0, 0);
+    if (fd < 0) {
+        if (state->active != NULL) request_fail(state->active, "SPICE_UNAVAILABLE", "Unable to open a libvirt graphics FD");
+        return;
+    }
+    if (!spice_channel_open_fd(channel, fd)) {
+        close(fd);
+        if (state->active != NULL) request_fail(state->active, "SPICE_UNAVAILABLE", "Unable to attach the SPICE channel graphics FD");
+    }
+}
+
 static void channel_new_cb(SpiceSession *session, SpiceChannel *channel, gpointer user_data) {
     HelperState *state = user_data;
     gint type = -1;
     (void) session;
     g_object_get(channel, "channel-type", &type, NULL);
     g_signal_connect(channel, "channel-event", G_CALLBACK(channel_event_cb), state);
+    if (state->libvirt_domain != NULL) {
+        g_signal_connect(channel, "open-fd", G_CALLBACK(channel_open_fd_cb), state);
+        if (type != SPICE_CHANNEL_MAIN) {
+            spice_channel_open_fd(channel, -1);
+        }
+    }
     if (type == SPICE_CHANNEL_MAIN && state->main_channel == NULL) {
         state->main_channel = SPICE_MAIN_CHANNEL(g_object_ref(channel));
         g_signal_connect(state->main_channel, "main-agent-update", G_CALLBACK(agent_update_cb), state);
@@ -243,14 +285,37 @@ static void channel_new_cb(SpiceSession *session, SpiceChannel *channel, gpointe
     }
 }
 
-static gboolean ensure_session(HelperState *state, const gchar *domain, const gchar *uri) {
-    if (state->session != NULL && g_strcmp0(state->domain, domain) == 0 && g_strcmp0(state->uri, uri) == 0) {
+static gboolean ensure_session(HelperState *state, const gchar *domain, const gchar *uri, const gchar *transport) {
+    if (state->session != NULL && g_strcmp0(state->domain, domain) == 0 && g_strcmp0(state->uri, uri) == 0
+        && g_strcmp0(state->transport, transport) == 0) {
         return TRUE;
     }
     clear_session(state);
     state->domain = g_strdup(domain);
     state->uri = g_strdup(uri);
+    state->transport = g_strdup(transport);
     state->session = spice_session_new();
+    if (g_strcmp0(transport, "libvirt-fd") == 0) {
+        const gchar *configured_uri = g_getenv("LIBVIRT_URI");
+        state->libvirt_uri = g_strdup(configured_uri != NULL && configured_uri[0] != '\0' ? configured_uri : "qemu:///system");
+        state->libvirt_connection = virConnectOpen(state->libvirt_uri);
+        if (state->libvirt_connection == NULL) {
+            clear_session(state);
+            return FALSE;
+        }
+        state->libvirt_domain = virDomainLookupByName(state->libvirt_connection, domain);
+        if (state->libvirt_domain == NULL) {
+            clear_session(state);
+            return FALSE;
+        }
+        g_object_set(state->session, "client-sockets", TRUE, NULL);
+        g_signal_connect(state->session, "channel-new", G_CALLBACK(channel_new_cb), state);
+        if (!spice_session_open_fd(state->session, -1)) {
+            clear_session(state);
+            return FALSE;
+        }
+        return TRUE;
+    }
     g_object_set(state->session, "uri", uri, NULL);
     g_signal_connect(state->session, "channel-new", G_CALLBACK(channel_new_cb), state);
     if (!spice_session_connect(state->session)) {
@@ -296,6 +361,7 @@ static guint64 bounded_member(JsonObject *object, const gchar *name, guint64 fal
 }
 
 static gboolean wait_for_channels(HelperState *state, gboolean need_inputs, guint timeout_ms) {
+    if (state->main_open && (!need_inputs || state->inputs_open)) return TRUE;
     pump_for(state, timeout_ms);
     return state->main_open && (!need_inputs || state->inputs_open);
 }
@@ -679,6 +745,7 @@ static void handle_line(HelperState *state, const gchar *line) {
     const gchar *operation;
     const gchar *domain;
     const gchar *uri;
+    const gchar *transport;
     Request *request;
     gboolean success = FALSE;
     GError *error = NULL;
@@ -701,14 +768,19 @@ static void handle_line(HelperState *state, const gchar *line) {
     JsonNode *display_node = json_object_get_member(object, "display");
     JsonObject *display = display_node != NULL && JSON_NODE_HOLDS_OBJECT(display_node) ? json_node_get_object(display_node) : NULL;
     uri = string_member(display, "uri");
+    transport = string_member(display, "transport");
+    if (transport == NULL) transport = "uri";
     args = arguments_object(object);
     if (json_object_get_int_member(object, "version") != PROTOCOL_VERSION || id == NULL || operation == NULL
-        || domain == NULL || uri == NULL || args == NULL || !g_str_has_prefix(uri, "spice://")) {
+        || domain == NULL || uri == NULL || args == NULL
+        || (g_strcmp0(transport, "uri") == 0 && !g_str_has_prefix(uri, "spice://"))
+        || (g_strcmp0(transport, "libvirt-fd") == 0 && g_strcmp0(uri, "spice+libvirt-fd://local") != 0)
+        || (g_strcmp0(transport, "uri") != 0 && g_strcmp0(transport, "libvirt-fd") != 0)) {
         emit_error(id, "INVALID_ARGUMENT", "Invalid version, identity, display endpoint, or arguments");
         g_object_unref(parser);
         return;
     }
-    if (!ensure_session(state, domain, uri)) {
+    if (!ensure_session(state, domain, uri, transport)) {
         emit_error(id, "SPICE_UNAVAILABLE", "Unable to start the SPICE session");
         g_object_unref(parser);
         return;

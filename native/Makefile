@@ -1,6 +1,6 @@
 CC ?= cc
 CFLAGS ?= -O2 -Wall -Wextra -Wpedantic
-PKGS = spice-client-glib-2.0 json-glib-1.0 gio-unix-2.0
+PKGS = spice-client-glib-2.0 json-glib-1.0 gio-unix-2.0 libvirt
 
 all: boxes-spice-helper
 

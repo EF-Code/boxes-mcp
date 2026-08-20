@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { callSpiceHelper, closeSpiceHelper, parseSpiceMouseResult, parseSpiceStatus, SpiceHelperClient, spiceHelperConfigured } from "./spice.js";
 
@@ -10,6 +10,7 @@ describe("SPICE helper boundary", () => {
     closeSpiceHelper();
     delete process.env.BOXES_SPICE_HELPER;
     delete process.env.BOXES_SPICE_OPERATION_TIMEOUT_MS;
+    delete process.env.BOXES_TEST_CAPTURE;
     if (tempDirectory) await rm(tempDirectory, { recursive: true, force: true });
     tempDirectory = undefined;
   });
@@ -42,6 +43,32 @@ printf '{"version":1,"id":"%s","ok":true,"result":{"operation":"%s"}}\\n' "$id" 
       display: { display: "spice://127.0.0.1:5900", protocol: "spice", host: "127.0.0.1", port: 5900 },
       arguments: { action: "move", x: 0.5, y: 0.5, coordinateSpace: "normalized" }
     })).resolves.toEqual({ operation: "mouse" });
+  });
+
+  it("preserves the libvirt graphics-FD transport in the helper envelope", async () => {
+    tempDirectory = await mkdtemp(join("/tmp", "boxes-mcp-spice-test-"));
+    const helper = join(tempDirectory, "helper.sh");
+    const capture = join(tempDirectory, "request.json");
+    await writeFile(helper, `#!/bin/sh
+IFS= read -r request
+printf '%s' "$request" > "$BOXES_TEST_CAPTURE"
+id=$(printf '%s' "$request" | sed -n 's/.*"id":"\\([^\"]*\\)".*/\\1/p')
+printf '{"version":1,"id":"%s","ok":true,"result":{}}\\n' "$id"
+`);
+    await chmod(helper, 0o700);
+    process.env.BOXES_SPICE_HELPER = helper;
+    process.env.BOXES_TEST_CAPTURE = capture;
+
+    await expect(callSpiceHelper({
+      operation: "status",
+      domain: "archlinux",
+      display: { display: "spice+libvirt-fd://local", protocol: "spice", transport: "libvirt-fd" },
+      arguments: {}
+    })).resolves.toEqual({});
+    expect(JSON.parse(await readFile(capture, "utf8")).display).toEqual({
+      uri: "spice+libvirt-fd://local",
+      transport: "libvirt-fd"
+    });
   });
 
   it("maps helper capability errors without exposing raw protocol access", async () => {

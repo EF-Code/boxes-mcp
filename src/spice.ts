@@ -5,7 +5,7 @@ import { StringDecoder } from "node:string_decoder";
 import type { Readable, Writable } from "node:stream";
 import { BoxesError, type BoxesErrorCode } from "./errors.js";
 import { parseEnvironmentInteger } from "./validation.js";
-import type { DisplayEndpoint } from "./display.js";
+import type { DisplayEndpoint, DisplayTransport } from "./display.js";
 
 export const SPICE_PROTOCOL_VERSION = 1;
 export const MAX_HELPER_LINE_BYTES = 4 * 1024 * 1024;
@@ -66,7 +66,7 @@ export interface SpiceHelperRequest {
   id: string;
   operation: SpiceOperation["operation"];
   domain: string;
-  display: { uri: string };
+  display: { uri: string; transport?: DisplayTransport };
   arguments: SpiceOperation["arguments"];
 }
 
@@ -236,7 +236,9 @@ export class SpiceHelperClient {
       id,
       operation: operation.operation,
       domain: operation.domain,
-      display: { uri: operation.display.display },
+      display: operation.display.transport === "libvirt-fd"
+        ? { uri: operation.display.display, transport: "libvirt-fd" }
+        : { uri: operation.display.display },
       arguments: operation.arguments
     };
     const line = JSON.stringify(request);

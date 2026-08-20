@@ -1,11 +1,13 @@
 import { BoxesError } from "./errors.js";
-import { displayAddress } from "./libvirt.js";
+import { displayAddress, domainXml } from "./libvirt.js";
 
 export type DisplayProtocol = "spice" | "vnc" | "unknown";
+export type DisplayTransport = "uri" | "libvirt-fd";
 
 export interface DisplayEndpoint {
   display: string;
   protocol: DisplayProtocol;
+  transport?: DisplayTransport;
   host?: string;
   port?: number;
   tlsPort?: number;
@@ -19,6 +21,7 @@ export interface DomainDisplayCapabilities {
   graphicsPort?: number;
   graphicsTlsPort?: number;
   graphicsSocket?: string;
+  graphicsListenType?: "address" | "network" | "socket" | "none" | "unknown";
   heads?: number;
   hasSpiceAgentChannel: boolean;
   hasAbsolutePointer: boolean;
@@ -43,6 +46,7 @@ export function parseDomainDisplayCapabilities(xml: string): DomainDisplayCapabi
   const graphicsType = xmlAttribute(graphicsTag || "", "type");
   const graphics = graphicsType === "spice" || graphicsType === "vnc" ? graphicsType : undefined;
   const listenTag = xml.match(/<listen\b[^>]*>/i)?.[0];
+  const listenType = xmlAttribute(listenTag || "", "type");
   const graphicsHost = xmlAttribute(listenTag || "", "address")
     || xmlAttribute(graphicsTag || "", "listen");
   const socket = xmlAttribute(graphicsTag || "", "socket");
@@ -62,6 +66,9 @@ export function parseDomainDisplayCapabilities(xml: string): DomainDisplayCapabi
     graphicsPort: integerAttribute(graphicsTag || "", "port"),
     graphicsTlsPort: integerAttribute(graphicsTag || "", "tlsPort"),
     graphicsSocket: socket,
+    graphicsListenType: listenType === "address" || listenType === "network" || listenType === "socket" || listenType === "none"
+      ? listenType
+      : listenType ? "unknown" : undefined,
     heads,
     hasSpiceAgentChannel: agentChannel,
     hasAbsolutePointer
@@ -110,6 +117,18 @@ export async function displayEndpoint(nameOrUuid: string): Promise<DisplayEndpoi
   try {
     result = await displayAddress(nameOrUuid);
   } catch (error) {
+    try {
+      const capabilities = parseDomainDisplayCapabilities(await domainXml(nameOrUuid));
+      if (capabilities.graphics === "spice" && capabilities.graphicsListenType === "none") {
+        return {
+          display: "spice+libvirt-fd://local",
+          protocol: "spice",
+          transport: "libvirt-fd"
+        };
+      }
+    } catch {
+      // Preserve the stable display error below when the fallback XML probe fails.
+    }
     throw new BoxesError("UNSUPPORTED_DISPLAY", "The domain has no active display endpoint", { cause: error });
   }
   return parseDisplayEndpoint(result.display);
