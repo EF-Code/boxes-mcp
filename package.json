@@ -1,24 +1,50 @@
 {
   "name": "boxes-mcp",
   "version": "0.1.0",
-  "private": true,
   "type": "module",
-  "description": "Claude Code MCP server for GNOME Boxes (libvirt/virsh)",
+  "description": "A local MCP server for safe, observable GNOME Boxes and libvirt VM operation",
   "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "bin": {
+    "boxes-mcp": "dist/src/index.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/EF-Code/boxes-mcp.git"
+  },
+  "homepage": "https://github.com/EF-Code/boxes-mcp#readme",
+  "bugs": {
+    "url": "https://github.com/EF-Code/boxes-mcp/issues"
+  },
+  "files": [
+    "dist",
+    "!dist/**/*.test.js",
+    "native",
+    "!native/boxes-spice-helper",
+    "systemd",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "build": "tsc -p .",
     "start": "node dist/src/index.js",
     "dev": "node --watch dist/src/index.js",
     "compile": "tsc -p .",
     "build:spice-helper": "make -C native",
+    "setup": "node dist/src/index.js setup",
+    "setup:guided": "node dist/src/index.js setup",
+    "doctor": "node dist/src/index.js doctor",
     "test": "vitest run",
     "test:integration": "vitest run src/integration.test.ts",
     "test:spice-helper": "npm run build:spice-helper && vitest run src/native-helper.test.ts",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "verify": "npm test && npm run build && npm pack --dry-run"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.2.0"
+    "@modelcontextprotocol/sdk": "^1.30.0"
   },
   "devDependencies": {
     "@types/node": "^22.7.5",
