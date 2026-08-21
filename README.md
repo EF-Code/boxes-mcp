@@ -5,9 +5,9 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 A local Model Context Protocol (MCP) server that enables compatible agents and developer
-harnesses to manage GNOME Boxes virtual machines through libvirt/virsh. It provides
-safe, reversible VM operations, snapshots, screenshots, bounded keyboard and mouse
-input, and capability-gated SPICE features.
+harnesses to manage GNOME Boxes and virt-manager virtual machines through
+libvirt/virsh. It provides safe, reversible VM operations, snapshots, screenshots,
+bounded keyboard and mouse input, and capability-gated SPICE features.
 
 The project intentionally targets GNOME Boxes' Linux libvirt/QEMU stack. VMware and
 VirtualBox are not currently supported; their display, input, guest-agent, clipboard,
@@ -29,6 +29,7 @@ separate, evidence-backed providers rather than inferred from the libvirt implem
 - 🖥️ **VM Lifecycle Management** - Start, stop, reboot, suspend, and resume VMs
 - 📸 **Snapshot Operations** - Create, list, revert, and delete VM snapshots
 - 🔍 **VM Discovery** - List and inspect all VMs with detailed information
+- 🔗 **Dual Connection Support** - Manages both `qemu:///system` (virt-manager) and `qemu:///session` (GNOME Boxes) simultaneously; per-domain operations automatically route to the owning connection
 - 🔒 **Safe Operations** - Storage preservation by default, no destructive actions
 - 🎯 **GNOME Boxes Compatible** - Works seamlessly with GNOME Boxes VMs
 - 🖱️ **Controlled Interaction** - Screenshot, allowlisted keyboard, and typed mouse tools
@@ -118,11 +119,12 @@ and never installs operating-system packages or changes VM definitions. Restart 
 configured agent or harness after setup. Run `boxes-mcp doctor` to inspect Node,
 `virsh`, and detected hosts.
 
-Optional host settings can be persisted during setup:
+Optional host settings can be persisted during setup (`--libvirt-uri` accepts a
+single URI or a comma-separated list, e.g. `qemu:///system,qemu:///session`):
 
 ```bash
 npx -y boxes-mcp@0.1.0 setup \
-  --libvirt-uri qemu:///session \
+  --libvirt-uri qemu:///system,qemu:///session \
   --input-backend auto \
   --spice-helper /absolute/path/to/native/boxes-spice-helper \
   --transfer-root /absolute/path/to/approved/files
@@ -163,7 +165,7 @@ For a manual setup, add the server to your Claude Code config (`~/.claude.json`)
       "command": "node",
       "args": ["/absolute/path/to/boxes-mcp/dist/src/index.js"],
       "env": {
-        "LIBVIRT_URI": "qemu:///system",
+        "LIBVIRT_URI": "qemu:///system,qemu:///session",
         "BOXES_INPUT_BACKEND": "auto"
       }
     }
@@ -215,7 +217,7 @@ not available.
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `LIBVIRT_URI` | `qemu:///system` | Libvirt connection used by every domain operation |
+| `LIBVIRT_URI` | `qemu:///system,qemu:///session` | Comma-separated list of libvirt connections. Every URI is scanned by `boxes.list`, and per-domain operations resolve the owning connection automatically. Set a single URI to restrict the server to one connection. |
 | `BOXES_INPUT_BACKEND` | `auto` | Default mouse backend preference: `auto`, `spice`, or `qmp` |
 | `BOXES_SPICE_HELPER` | unset | Explicit executable implementing the versioned SPICE helper protocol |
 | `BOXES_SPICE_OPERATION_TIMEOUT_MS` | `30000` | Maximum one helper request duration |
@@ -378,7 +380,7 @@ journalctl --user -fu boxes-mcp
 - ✅ **Bounded Payloads**: Key counts, hold durations, coordinates, scroll deltas, screenshots, clipboard, and transfers are capped
 - ✅ **Path Confinement**: Drag/drop sources must remain beneath `BOXES_TRANSFER_ROOT` after canonicalization
 - ✅ **Storage Preservation**: VM storage not deleted by default
-- ✅ **LIBVIRT_URI Isolation**: Respects environment-specified libvirt connection
+- ✅ **LIBVIRT_URI Isolation**: Respects environment-specified libvirt connections; per-domain operations resolve the owning connection before acting, so a same-named domain on another connection is never targeted by mistake
 - ⚠️ **Permissions Required**: User must have libvirt group membership
 - ⚠️ **Network Exposure**: Not designed for remote access without additional security
 - ⚠️ **Expanded Control Surface**: Screenshots and guest clipboard data are untrusted; keep the MCP server on local stdio
@@ -450,11 +452,25 @@ newgrp libvirt
 
 ### VMs Not Showing in Boxes
 
-Open `virt-manager` and check which connection your VMs use:
-- System connection: `qemu:///system`
-- User session: `qemu:///session`
+By default the server scans both the system connection (virt-manager) and the user
+session connection (GNOME Boxes), and `boxes.list` reports which connection each
+domain was found on. Verify what each connection sees:
 
-Set `LIBVIRT_URI` environment variable accordingly.
+```bash
+virsh -c qemu:///system list --all
+virsh -c qemu:///session list --all
+```
+
+To restrict the server to specific connections, set `LIBVIRT_URI` to one URI or a
+comma-separated list:
+
+```bash
+LIBVIRT_URI=qemu:///session node dist/src/index.js            # GNOME Boxes only
+LIBVIRT_URI=qemu:///system,qemu:///session node dist/src/index.js  # both (default)
+```
+
+Domain names may contain spaces (for example `Kali Live`); they are parsed and
+resolved correctly.
 
 ### SPICE capability errors
 
