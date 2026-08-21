@@ -5,6 +5,7 @@ import { StringDecoder } from "node:string_decoder";
 import type { Readable, Writable } from "node:stream";
 import { BoxesError, type BoxesErrorCode } from "./errors.js";
 import { parseEnvironmentInteger } from "./validation.js";
+import { resolveDomainUri } from "./virsh.js";
 import type { DisplayEndpoint, DisplayTransport } from "./display.js";
 
 export const SPICE_PROTOCOL_VERSION = 1;
@@ -68,6 +69,7 @@ export interface SpiceHelperRequest {
   domain: string;
   display: { uri: string; transport?: DisplayTransport };
   arguments: SpiceOperation["arguments"];
+  libvirtUri?: string;
 }
 
 export interface SpiceHelperResponse {
@@ -230,6 +232,9 @@ export class SpiceHelperClient {
       throw new BoxesError("BACKEND_UNAVAILABLE", "Too many pending SPICE helper requests");
     }
 
+    // Resolve before spawning so no await sits between child creation and the
+    // first stdin write; an abort during resolution must never orphan a child.
+    const libvirtUri = await resolveDomainUri(operation.domain);
     const child = this.ensureChild(helper);
     const id = `boxes-${randomUUID()}`;
     const request: SpiceHelperRequest = {
@@ -240,7 +245,8 @@ export class SpiceHelperClient {
       display: operation.display.transport === "libvirt-fd"
         ? { uri: operation.display.display, transport: "libvirt-fd" }
         : { uri: operation.display.display },
-      arguments: operation.arguments
+      arguments: operation.arguments,
+      libvirtUri
     };
     const line = JSON.stringify(request);
     if (Buffer.byteLength(line, "utf8") > this.maxLineBytes) {

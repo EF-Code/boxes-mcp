@@ -304,7 +304,7 @@ static void channel_new_cb(SpiceSession *session, SpiceChannel *channel, gpointe
     }
 }
 
-static gboolean ensure_session(HelperState *state, const gchar *domain, const gchar *uri, const gchar *transport) {
+static gboolean ensure_session(HelperState *state, const gchar *domain, const gchar *uri, const gchar *transport, const gchar *libvirt_uri) {
     if (state->session != NULL && g_strcmp0(state->domain, domain) == 0 && g_strcmp0(state->uri, uri) == 0
         && g_strcmp0(state->transport, transport) == 0 && !state->session_needs_reconnect) {
         return TRUE;
@@ -315,7 +315,12 @@ static gboolean ensure_session(HelperState *state, const gchar *domain, const gc
     state->transport = g_strdup(transport);
     state->session = spice_session_new();
     if (g_strcmp0(transport, "libvirt-fd") == 0) {
-        const gchar *configured_uri = g_getenv("LIBVIRT_URI");
+        const gchar *configured_uri = libvirt_uri != NULL && libvirt_uri[0] != '\0' ? libvirt_uri : g_getenv("LIBVIRT_URI");
+        /* A comma-separated LIBVIRT_URI list is an MCP-server-side routing hint,
+         * not a valid single libvirt connection string. */
+        if (configured_uri != NULL && strchr(configured_uri, ',') != NULL) {
+            configured_uri = "qemu:///system";
+        }
         state->libvirt_uri = g_strdup(configured_uri != NULL && configured_uri[0] != '\0' ? configured_uri : "qemu:///system");
         state->libvirt_connection = virConnectOpen(state->libvirt_uri);
         if (state->libvirt_connection == NULL) {
@@ -829,7 +834,7 @@ static void handle_line(HelperState *state, const gchar *line) {
         g_object_unref(parser);
         return;
     }
-    if (!ensure_session(state, domain, uri, transport)) {
+    if (!ensure_session(state, domain, uri, transport, string_member(object, "libvirtUri"))) {
         emit_error(id, "SPICE_UNAVAILABLE", "Unable to start the SPICE session");
         g_object_unref(parser);
         return;
