@@ -4,7 +4,10 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.6-blue)](.)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-A lightweight Model Context Protocol (MCP) server that enables Claude Code to manage GNOME Boxes virtual machines through libvirt/virsh. Provides safe, reversible VM operations with comprehensive snapshot management.
+A local Model Context Protocol (MCP) server that enables compatible agents and developer
+harnesses to manage GNOME Boxes virtual machines through libvirt/virsh. It provides
+safe, reversible VM operations, snapshots, screenshots, bounded keyboard and mouse
+input, and capability-gated SPICE features.
 
 The project intentionally targets GNOME Boxes' Linux libvirt/QEMU stack. VMware and
 VirtualBox are not currently supported; their display, input, guest-agent, clipboard,
@@ -61,11 +64,69 @@ sudo usermod -aG libvirt,kvm "$USER"
 newgrp libvirt
 ```
 
-### Installation
+### Published npm installation
+
+The published package includes a guided installer for local MCP hosts. It installs the
+Node server only; `libvirt`, `virsh`, QEMU, and optional SPICE development libraries
+remain host prerequisites.
 
 ```bash
-# Clone the repository
-git clone https://github.com/your-org/boxes-mcp.git
+# Detect installed MCP hosts and configure them
+npx -y boxes-mcp@0.1.0 setup
+
+# Or install the command globally
+npm install --global boxes-mcp@0.1.0
+boxes-mcp setup
+```
+
+Preview configuration without writing files:
+
+```bash
+npx -y boxes-mcp@0.1.0 setup --dry-run
+```
+
+Configure one host explicitly when it is not discoverable on `PATH`:
+
+```bash
+npx -y boxes-mcp@0.1.0 setup --client codex
+npx -y boxes-mcp@0.1.0 setup --client claude
+npx -y boxes-mcp@0.1.0 setup --client openclaw
+```
+
+The installer detects or can explicitly configure Codex, Claude Code, OpenClaw,
+Antigravity, Gemini CLI, OpenCode, Cursor, Windsurf, VS Code, Pi, Cline, Zed, and
+Goose. Use `--client generic` to print a portable JSON configuration for another
+stdio-capable agent:
+
+```bash
+npx -y boxes-mcp@0.1.0 setup --client generic
+```
+
+The setup command writes only the selected MCP entry, creates a one-time
+`.boxes-mcp.bak` backup before changing an existing config, uses atomic replacement,
+and never installs operating-system packages or changes VM definitions. Restart the
+configured agent or harness after setup. Run `boxes-mcp doctor` to inspect Node,
+`virsh`, and detected hosts.
+
+Optional host settings can be persisted during setup:
+
+```bash
+npx -y boxes-mcp@0.1.0 setup \
+  --libvirt-uri qemu:///session \
+  --input-backend auto \
+  --spice-helper /absolute/path/to/native/boxes-spice-helper \
+  --transfer-root /absolute/path/to/approved/files
+```
+
+The native SPICE helper is not bundled as a universal binary. Build it on a compatible
+Linux host after installing the host's SPICE/libvirt development packages, then pass
+its reviewed absolute path with `--spice-helper` or `BOXES_SPICE_HELPER`.
+
+### Source checkout installation
+
+```bash
+# Clone the repository for unreleased changes or development
+git clone https://github.com/EF-Code/boxes-mcp.git
 cd boxes-mcp
 
 # Install dependencies
@@ -76,6 +137,9 @@ npm run build
 
 # Run tests
 npm test
+
+# Configure a local checkout with the same guided installer
+npm run setup:guided -- --client codex
 ```
 
 ### Configuration
