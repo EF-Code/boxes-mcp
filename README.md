@@ -83,25 +83,25 @@ host prerequisites.
 
 ```bash
 # Detect installed MCP hosts and configure them
-npx -y boxes-mcp@0.1.0 setup
+npx -y boxes-mcp@2.0.0 setup
 
 # Or install the command globally
-npm install --global boxes-mcp@0.1.0
+npm install --global boxes-mcp@2.0.0
 boxes-mcp setup
 ```
 
 Preview configuration without writing files:
 
 ```bash
-npx -y boxes-mcp@0.1.0 setup --dry-run
+npx -y boxes-mcp@2.0.0 setup --dry-run
 ```
 
 Configure one host explicitly when it is not discoverable on `PATH`:
 
 ```bash
-npx -y boxes-mcp@0.1.0 setup --client codex
-npx -y boxes-mcp@0.1.0 setup --client claude
-npx -y boxes-mcp@0.1.0 setup --client openclaw
+npx -y boxes-mcp@2.0.0 setup --client codex
+npx -y boxes-mcp@2.0.0 setup --client claude
+npx -y boxes-mcp@2.0.0 setup --client openclaw
 ```
 
 The installer detects or can explicitly configure Codex, Claude Code, OpenClaw,
@@ -110,7 +110,7 @@ Goose. Use `--client generic` to print a portable JSON configuration for another
 stdio-capable agent:
 
 ```bash
-npx -y boxes-mcp@0.1.0 setup --client generic
+npx -y boxes-mcp@2.0.0 setup --client generic
 ```
 
 The setup command writes only the selected MCP entry, creates a one-time
@@ -123,7 +123,7 @@ Optional host settings can be persisted during setup (`--libvirt-uri` accepts a
 single URI or a comma-separated list, e.g. `qemu:///system,qemu:///session`):
 
 ```bash
-npx -y boxes-mcp@0.1.0 setup \
+npx -y boxes-mcp@2.0.0 setup \
   --libvirt-uri qemu:///system,qemu:///session \
   --input-backend auto \
   --spice-helper /absolute/path/to/native/boxes-spice-helper \
@@ -400,9 +400,15 @@ request envelope is shaped like:
   "operation": "clipboard.read",
   "domain": "guest-name",
   "display": { "uri": "spice://127.0.0.1:5900" },
-  "arguments": { "selection": "clipboard", "maxBytes": 1048576 }
+  "arguments": { "selection": "clipboard", "maxBytes": 1048576 },
+  "libvirtUri": "qemu:///session"
 }
 ```
+
+`libvirtUri` is optional and carries the resolved libvirt connection for the target
+domain; when present, the helper prefers it over its own `LIBVIRT_URI` environment
+value. This keeps `libvirt-fd` transport working when the server is configured with
+multiple comma-separated connections.
 
 Supported operation names are internal (`status`, `mouse`, `clipboard.read`,
 `clipboard.write`, `file.transfer`, and `drag-drop`). A helper error is mapped to a
