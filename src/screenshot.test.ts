@@ -38,6 +38,7 @@ describe("screenshot adapter", () => {
     Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]).copy(png);
     png.writeUInt32BE(1, 16);
     png.writeUInt32BE(1, 20);
+    vi.mocked(exec.sh).mockResolvedValueOnce({ stdout: "", stderr: "" }); // URI resolution probe
     vi.mocked(exec.sh).mockImplementationOnce(async (_cmd, args) => {
       const output = args[args.indexOf("--file") + 1];
       await writeFile(output, png);

@@ -106,7 +106,7 @@ describe('libvirt.listDomains()', () => {
     const result = await libvirt.listDomains();
 
     expect(result).toEqual([
-      { id: '3', name: 'vm1', uuid: 'abc-123-def', state: 'running' }
+      { id: '3', name: 'vm1', uuid: 'abc-123-def', state: 'running', uri: 'qemu:///system' }
     ]);
   });
 
@@ -126,7 +126,7 @@ describe('libvirt.listDomains()', () => {
     const result = await libvirt.listDomains();
 
     expect(result).toEqual([
-      { id: '3', name: 'vm1', uuid: '', state: 'running' }
+      { id: '3', name: 'vm1', uuid: '', state: 'running', uri: 'qemu:///system' }
     ]);
   });
 });
@@ -138,6 +138,9 @@ describe('libvirt.domainInfo()', () => {
 
   it('should parse domain info correctly', async () => {
     const mockSh = vi.mocked(exec.sh);
+
+    // URI resolution probe
+    mockSh.mockResolvedValueOnce({ stdout: '', stderr: '' });
 
     mockSh.mockResolvedValueOnce({
       stdout: `Id:             3
@@ -170,12 +173,14 @@ describe('libvirt.startDomain()', () => {
 
   it('should call virsh start with correct arguments', async () => {
     const mockSh = vi.mocked(exec.sh);
+    // URI resolution probe
+    mockSh.mockResolvedValueOnce({ stdout: '', stderr: '' });
     mockSh.mockResolvedValueOnce({ stdout: '', stderr: '' });
 
     const result = await libvirt.startDomain('test-vm');
 
     expect(result).toEqual({ ok: true });
-    const callArgs = mockSh.mock.calls[0][1];
+    const callArgs = mockSh.mock.calls[1][1];
     expect(callArgs).toContain('start');
     expect(callArgs).toContain('test-vm');
   });

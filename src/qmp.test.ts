@@ -8,11 +8,13 @@ describe("QMP adapter", () => {
   beforeEach(() => vi.resetAllMocks());
 
   it("normalizes coordinates and builds a fixed monitor command", async () => {
-    vi.mocked(exec.sh).mockResolvedValueOnce({ stdout: '{"return":[]}', stderr: "" });
+    vi.mocked(exec.sh)
+      .mockResolvedValueOnce({ stdout: "", stderr: "" }) // URI resolution probe
+      .mockResolvedValueOnce({ stdout: '{"return":[]}', stderr: "" });
     expect(absoluteCoordinate(0.5)).toBe(16384);
     expect(pixelCoordinate(50, 100)).toBe(16384);
     await qmpExecute("vm", "query-mice");
-    const args = vi.mocked(exec.sh).mock.calls[0][1];
+    const args = vi.mocked(exec.sh).mock.calls[1][1];
     expect(args.slice(0, 5)).toEqual(["-c", "qemu:///system", "qemu-monitor-command", "vm", "--pretty"]);
     expect(JSON.parse(args[5])).toEqual({ execute: "query-mice", arguments: {} });
   });

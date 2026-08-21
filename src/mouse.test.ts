@@ -29,6 +29,7 @@ describe("mouse actions", () => {
 
   it("sends QMP probe and typed input event without raw passthrough", async () => {
     vi.mocked(exec.sh)
+      .mockResolvedValueOnce({ stdout: "", stderr: "" }) // URI resolution probe
       .mockResolvedValueOnce({ stdout: '{"return":[{"name":"input-send-event"}]}', stderr: "" })
       .mockResolvedValueOnce({ stdout: '{"return":[{"name":"QEMU USB Tablet","absolute":true}]}', stderr: "" })
       .mockResolvedValueOnce({ stdout: '{"return":{}}', stderr: "" });
@@ -37,8 +38,8 @@ describe("mouse actions", () => {
     });
     const result = await sendMouse({ nameOrUuid: "vm", action: "move", x: 0.1, y: 0.2, backend: "qmp" });
     expect(result).toMatchObject({ ok: true, backend: "qmp", action: "move", head: 0, display: "spice://127.0.0.1:5900" });
-    expect(vi.mocked(exec.sh).mock.calls).toHaveLength(3);
-    const request = JSON.parse(vi.mocked(exec.sh).mock.calls[2][1][5]);
+    expect(vi.mocked(exec.sh).mock.calls).toHaveLength(4);
+    const request = JSON.parse(vi.mocked(exec.sh).mock.calls[3][1][5]);
     expect(request.execute).toBe("input-send-event");
     expect(request.arguments.events).toHaveLength(2);
   });

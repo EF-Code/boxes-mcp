@@ -30,10 +30,12 @@ describe("keyboard validation and virsh adapter", () => {
   });
 
   it("constructs only the fixed send-key command", async () => {
-    vi.mocked(exec.sh).mockResolvedValueOnce({ stdout: "", stderr: "" });
+    vi.mocked(exec.sh)
+      .mockResolvedValueOnce({ stdout: "", stderr: "" }) // URI resolution probe
+      .mockResolvedValueOnce({ stdout: "", stderr: "" });
     const result = await sendKeyboard({ nameOrUuid: "vm", keys: ["CTRL", "C"], holdMs: 250 });
     expect(result).toEqual({ ok: true, backend: "virsh", keys: ["CTRL", "C"], holdMs: 250 });
-    expect(vi.mocked(exec.sh).mock.calls[0]).toEqual([
+    expect(vi.mocked(exec.sh).mock.calls[1]).toEqual([
       "virsh",
       ["-c", "qemu:///system", "send-key", "vm", "--codeset", "linux", "--holdtime", "250", "KEY_LEFTCTRL", "KEY_C"]
     ]);
