@@ -52,8 +52,8 @@ newgrp libvirt
 ### Local Development
 
 ```bash
-# Clone your fork
-git clone https://github.com/your-username/boxes-mcp.git
+# Clone the repository
+git clone https://github.com/EF-Code/boxes-mcp.git
 cd boxes-mcp
 
 # Install dependencies
@@ -168,7 +168,7 @@ boxes-mcp/
 │   └── *.test.ts         # Test files
 ├── systemd/              # Service configuration
 ├── .github/              # GitHub workflows
-└── docs/                 # Additional documentation
+└── README.md             # User and operator documentation
 ```
 
 ## Testing Guidelines
@@ -256,8 +256,8 @@ Update README.md when adding:
 
 ## Getting Help
 
-- **Questions**: Open a [Discussion](https://github.com/your-org/boxes-mcp/discussions)
-- **Issues**: Check [existing issues](https://github.com/your-org/boxes-mcp/issues)
+- **Questions**: Open a [Discussion](https://github.com/EF-Code/boxes-mcp/discussions)
+- **Issues**: Check [existing issues](https://github.com/EF-Code/boxes-mcp/issues)
 - **Chat**: Join our community discussions
 
 ## License

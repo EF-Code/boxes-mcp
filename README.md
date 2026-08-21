@@ -362,8 +362,8 @@ NODE_BIN="$(command -v node)"
 mkdir -p ~/.config/systemd/user
 cp systemd/boxes-mcp.service ~/.config/systemd/user/
 sed -i \
-  -e "s|%h/projects/virtmcp/node_modules/.bin/node|$NODE_BIN|g" \
-  -e "s|%h/projects/virtmcp|$BOXES_MCP_DIR|g" \
+  -e "s|/usr/bin/node|$NODE_BIN|g" \
+  -e "s|%h/projects/boxes-mcp|$BOXES_MCP_DIR|g" \
   ~/.config/systemd/user/boxes-mcp.service
 systemctl --user daemon-reload
 systemctl --user enable --now boxes-mcp
