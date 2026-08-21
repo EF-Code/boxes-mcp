@@ -1,6 +1,6 @@
 import { BoxesError } from "./errors.js";
 import { sh } from "./exec.js";
-import { VIRSH, commonArgs } from "./virsh.js";
+import { VIRSH, argsForDomain } from "./virsh.js";
 import { normalizedCoordinate, requireNameOrUuid } from "./validation.js";
 
 export type QmpButton = "left" | "middle" | "right" | "wheel-up" | "wheel-down" | "wheel-left" | "wheel-right";
@@ -47,7 +47,7 @@ export async function qmpExecute(
   let stdout: string;
   try {
     ({ stdout } = await sh(VIRSH, [
-      ...commonArgs(),
+      ...(await argsForDomain(validatedName)),
       "qemu-monitor-command",
       validatedName,
       "--pretty",

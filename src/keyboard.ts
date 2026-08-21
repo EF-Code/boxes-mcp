@@ -1,6 +1,6 @@
 import { BoxesError } from "./errors.js";
 import { sh } from "./exec.js";
-import { VIRSH, commonArgs } from "./virsh.js";
+import { VIRSH, argsForDomain } from "./virsh.js";
 import { asRecord, boundedInteger, requireNameOrUuid, requireString } from "./validation.js";
 import { requireRunningDomain } from "./libvirt.js";
 
@@ -75,7 +75,7 @@ export async function sendKeyboard(value: unknown): Promise<{ ok: true; backend:
   const virshKeys = request.keys.map(key => KEY_NAMES[key]);
   try {
     await sh(VIRSH, [
-      ...commonArgs(),
+      ...(await argsForDomain(request.nameOrUuid)),
       "send-key",
       request.nameOrUuid,
       "--codeset",

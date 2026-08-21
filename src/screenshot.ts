@@ -5,7 +5,7 @@ import { BoxesError } from "./errors.js";
 import { requireNameOrUuid, boundedInteger, asRecord, enumValue, parseEnvironmentInteger } from "./validation.js";
 import { requireRunningDomain } from "./libvirt.js";
 import { sh } from "./exec.js";
-import { VIRSH, commonArgs } from "./virsh.js";
+import { VIRSH, argsForDomain } from "./virsh.js";
 
 export type ScreenshotBackend = "auto" | "libvirt";
 
@@ -125,7 +125,7 @@ export async function captureScreenshot(value: unknown): Promise<ScreenshotResul
 
   try {
     await sh(VIRSH, [
-      ...commonArgs(),
+      ...(await argsForDomain(request.nameOrUuid)),
       "screenshot",
       request.nameOrUuid,
       "--file",
