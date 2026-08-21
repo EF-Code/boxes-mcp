@@ -1,5 +1,5 @@
 import { sh } from "./exec.js";
-import { VIRSH, commonArgs } from "./virsh.js";
+import { VIRSH, commonArgsFor, URIS, argsForDomain } from "./virsh.js";
 import { BoxesError } from "./errors.js";
 
 export type DomainState =
@@ -15,6 +15,7 @@ export interface DomainSummary {
   name: string;
   uuid: string;
   state: DomainState;
+  uri?: string;    // libvirt connection the domain was found on
 }
 
 export interface SnapshotSummary {
@@ -24,15 +25,38 @@ export interface SnapshotSummary {
   description?: string;
 }
 
-// Parse `virsh list --all` output
+// Parse `virsh list --all` output. Names may contain spaces (e.g.
+// "Kali Live"), so column boundaries are taken from the header line rather
+// than split on whitespace.
 export function parseVirshList(text: string): DomainSummary[] {
-  const lines = text.split("\n").map(l => l.trim());
+  const lines = text.split("\n");
   const out: DomainSummary[] = [];
-  for (const line of lines) {
+  const headerIdx = lines.findIndex(l => l.includes("Name") && l.includes("State"));
+  if (headerIdx >= 0) {
+    const header = lines[headerIdx];
+    const nameStart = header.indexOf("Name");
+    const stateStart = header.indexOf("State");
+    for (const line of lines.slice(headerIdx + 1)) {
+      if (!line.trim() || line.match(/^-+$/)) continue;
+      const id = line.slice(0, nameStart).trim();
+      const name = line.slice(nameStart, stateStart).trim();
+      const state = line.slice(stateStart).trim();
+      if (!name) continue;
+      out.push({
+        id: id && id !== "-" ? id : undefined,
+        name,
+        uuid: "",
+        state: (state || "unknown") as DomainState
+      });
+    }
+    return out;
+  }
+  // Fallback for unexpected formats:
+  //  3   ubuntu-24.04     running
+  //  -   win10            shut off
+  for (const raw of lines) {
+    const line = raw.trim();
     if (!line || line.startsWith("Id ") || line.match(/^-+$/)) continue;
-    // Formats:
-    //  3   ubuntu-24.04     running
-    //  -   win10            shut off
     const m = line.match(/^(\S+)\s+(\S+)\s+(.+)$/);
     if (!m) continue;
     const id = m[1] !== "-" ? m[1] : undefined;
@@ -44,22 +68,35 @@ export function parseVirshList(text: string): DomainSummary[] {
 }
 
 export async function listDomains(): Promise<DomainSummary[]> {
-  const { stdout } = await sh(VIRSH, [...commonArgs(), "list", "--all"]);
-  const basic = parseVirshList(stdout);
-  // enrich with UUIDs
-  for (const d of basic) {
+  const seen = new Set<string>();
+  const out: DomainSummary[] = [];
+  for (const uri of URIS) {
+    let stdout: string;
     try {
-      const { stdout: uuid } = await sh(VIRSH, [...commonArgs(), "domuuid", d.name]);
-      d.uuid = uuid.trim();
+      ({ stdout } = await sh(VIRSH, [...commonArgsFor(uri), "list", "--all"]));
     } catch {
-      d.uuid = "";
+      continue; // connection unavailable; skip it
+    }
+    const basic = parseVirshList(stdout);
+    for (const d of basic) {
+      d.uri = uri;
+      try {
+        const { stdout: uuid } = await sh(VIRSH, [...commonArgsFor(uri), "domuuid", d.name]);
+        d.uuid = uuid.trim();
+      } catch {
+        d.uuid = "";
+      }
+      const key = d.uuid || `${uri}:${d.name}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(d);
     }
   }
-  return basic;
+  return out;
 }
 
 export async function domainInfo(nameOrUuid: string) {
-  const { stdout } = await sh(VIRSH, [...commonArgs(), "dominfo", nameOrUuid]);
+  const { stdout } = await sh(VIRSH, [...(await argsForDomain(nameOrUuid)), "dominfo", nameOrUuid]);
   const info: Record<string, string> = {};
   for (const line of stdout.split("\n")) {
     const idx = line.indexOf(":");
@@ -86,43 +123,43 @@ export async function requireRunningDomain(nameOrUuid: string): Promise<Record<s
 }
 
 export async function startDomain(nameOrUuid: string) {
-  await sh(VIRSH, [...commonArgs(), "start", nameOrUuid]);
+  await sh(VIRSH, [...(await argsForDomain(nameOrUuid)), "start", nameOrUuid]);
   return { ok: true };
 }
 
 export async function shutdownDomain(nameOrUuid: string, force = false) {
   if (force) {
-    await sh(VIRSH, [...commonArgs(), "destroy", nameOrUuid]);
+    await sh(VIRSH, [...(await argsForDomain(nameOrUuid)), "destroy", nameOrUuid]);
   } else {
-    await sh(VIRSH, [...commonArgs(), "shutdown", nameOrUuid]);
+    await sh(VIRSH, [...(await argsForDomain(nameOrUuid)), "shutdown", nameOrUuid]);
   }
   return { ok: true };
 }
 
 export async function rebootDomain(nameOrUuid: string) {
-  await sh(VIRSH, [...commonArgs(), "reboot", nameOrUuid]);
+  await sh(VIRSH, [...(await argsForDomain(nameOrUuid)), "reboot", nameOrUuid]);
   return { ok: true };
 }
 
 export async function suspendDomain(nameOrUuid: string) {
-  await sh(VIRSH, [...commonArgs(), "suspend", nameOrUuid]);
+  await sh(VIRSH, [...(await argsForDomain(nameOrUuid)), "suspend", nameOrUuid]);
   return { ok: true };
 }
 
 export async function resumeDomain(nameOrUuid: string) {
-  await sh(VIRSH, [...commonArgs(), "resume", nameOrUuid]);
+  await sh(VIRSH, [...(await argsForDomain(nameOrUuid)), "resume", nameOrUuid]);
   return { ok: true };
 }
 
 export async function undefineDomain(nameOrUuid: string, keepStorage = true) {
-  const args = [...commonArgs(), "undefine", nameOrUuid];
+  const args = [...(await argsForDomain(nameOrUuid)), "undefine", nameOrUuid];
   if (keepStorage) args.push("--keep-nvram");
   await sh(VIRSH, args);
   return { ok: true };
 }
 
 export async function listSnapshots(nameOrUuid: string): Promise<SnapshotSummary[]> {
-  const { stdout } = await sh(VIRSH, [...commonArgs(), "snapshot-list", nameOrUuid, "--tree"]);
+  const { stdout } = await sh(VIRSH, [...(await argsForDomain(nameOrUuid)), "snapshot-list", nameOrUuid, "--tree"]);
   // Example row: "- test-snap                       2024-10-01 12:00:00 +0000"
   const lines = stdout.split("\n").filter(Boolean);
   const snaps: SnapshotSummary[] = [];
@@ -137,29 +174,29 @@ export async function listSnapshots(nameOrUuid: string): Promise<SnapshotSummary
 }
 
 export async function createSnapshot(nameOrUuid: string, snapName: string, description?: string) {
-  const args = [...commonArgs(), "snapshot-create-as", nameOrUuid, snapName];
+  const args = [...(await argsForDomain(nameOrUuid)), "snapshot-create-as", nameOrUuid, snapName];
   if (description) args.push("--description", description);
   await sh(VIRSH, args);
   return { ok: true };
 }
 
 export async function revertSnapshot(nameOrUuid: string, snapName: string) {
-  await sh(VIRSH, [...commonArgs(), "snapshot-revert", nameOrUuid, snapName]);
+  await sh(VIRSH, [...(await argsForDomain(nameOrUuid)), "snapshot-revert", nameOrUuid, snapName]);
   return { ok: true };
 }
 
 export async function deleteSnapshot(nameOrUuid: string, snapName: string) {
-  await sh(VIRSH, [...commonArgs(), "snapshot-delete", nameOrUuid, "--snapshotname", snapName]);
+  await sh(VIRSH, [...(await argsForDomain(nameOrUuid)), "snapshot-delete", nameOrUuid, "--snapshotname", snapName]);
   return { ok: true };
 }
 
 export async function displayAddress(nameOrUuid: string) {
-  const { stdout } = await sh(VIRSH, [...commonArgs(), "domdisplay", nameOrUuid]);
+  const { stdout } = await sh(VIRSH, [...(await argsForDomain(nameOrUuid)), "domdisplay", nameOrUuid]);
   return { display: stdout.trim() }; // e.g. spice://127.0.0.1:5900 or vnc://...
 }
 
 /** Return active domain XML to internal capability parsers; callers must not expose it. */
 export async function domainXml(nameOrUuid: string): Promise<string> {
-  const { stdout } = await sh(VIRSH, [...commonArgs(), "dumpxml", nameOrUuid]);
+  const { stdout } = await sh(VIRSH, [...(await argsForDomain(nameOrUuid)), "dumpxml", nameOrUuid]);
   return stdout;
 }
