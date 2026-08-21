@@ -14,6 +14,16 @@ VirtualBox are not currently supported; their display, input, guest-agent, clipb
 and drag/drop APIs have different trust and capability contracts and should be added as
 separate, evidence-backed providers rather than inferred from the libvirt implementation.
 
+## Contents
+
+- [Installation](#installation)
+- [Configuration](#configuration)
+- [Available tools](#available-tools)
+- [Usage examples](#usage-examples)
+- [Development](#development)
+- [Troubleshooting](#troubleshooting)
+- [Security considerations](#security-considerations)
+
 ## Features
 
 - 🖥️ **VM Lifecycle Management** - Start, stop, reboot, suspend, and resume VMs
@@ -25,9 +35,9 @@ separate, evidence-backed providers rather than inferred from the libvirt implem
 - 🔌 **Capability-Gated SPICE** - Optional native helper protocol for SPICE input, clipboard, and transfer
 - ⚡ **Fast & Lightweight** - Minimal overhead, direct virsh integration
 
-## Quick Start
+## Installation
 
-### Prerequisites
+### Host prerequisites
 
 - Ubuntu 22.04/24.04 (or compatible Linux distribution)
 - libvirt-daemon-system, qemu-kvm installed
@@ -64,11 +74,11 @@ sudo usermod -aG libvirt,kvm "$USER"
 newgrp libvirt
 ```
 
-### Published npm installation
+### Install from npm
 
-The published package includes a guided installer for local MCP hosts. It installs the
-Node server only; `libvirt`, `virsh`, QEMU, and optional SPICE development libraries
-remain host prerequisites.
+The npm package includes a guided installer for local MCP hosts. It installs the Node
+server only; `libvirt`, `virsh`, QEMU, and optional SPICE development libraries remain
+host prerequisites.
 
 ```bash
 # Detect installed MCP hosts and configure them
@@ -122,7 +132,7 @@ The native SPICE helper is not bundled as a universal binary. Build it on a comp
 Linux host after installing the host's SPICE/libvirt development packages, then pass
 its reviewed absolute path with `--spice-helper` or `BOXES_SPICE_HELPER`.
 
-### Source checkout installation
+### Install from source
 
 ```bash
 # Clone the repository for unreleased changes or development
@@ -144,7 +154,7 @@ npm run setup:guided -- --client codex
 
 ### Configuration
 
-Add to your Claude Code config (`~/.claude/config.json`):
+For a manual setup, add the server to your Claude Code config (`~/.claude.json`):
 
 ```json
 {
@@ -297,7 +307,7 @@ npm run test:watch
 npm run test:coverage
 ```
 
-**Local test coverage**: the current checkout runs 89 passing tests and 9 gated live
+**Local test coverage**: the current checkout runs 95 passing tests and 9 gated live
 tests skipped by default. The default suite is safe to run without libvirt access.
 
 - `exec.ts`: 100% statements
@@ -340,14 +350,21 @@ npm run build
 npm run dev
 ```
 
-## Systemd Service
+## Optional systemd user service
 
-Install as a user service for automatic startup:
+The checked-in unit is intended for a source checkout. It is not needed when the
+server is launched by an agent's MCP configuration or installed globally with npm.
+Install it as a user service for automatic startup after building the checkout:
 
 ```bash
+BOXES_MCP_DIR="$(pwd)"
+NODE_BIN="$(command -v node)"
 mkdir -p ~/.config/systemd/user
 cp systemd/boxes-mcp.service ~/.config/systemd/user/
-sed -i "s|%h/projects/virtmcp|$HOME/boxes-mcp|g" ~/.config/systemd/user/boxes-mcp.service
+sed -i \
+  -e "s|%h/projects/virtmcp/node_modules/.bin/node|$NODE_BIN|g" \
+  -e "s|%h/projects/virtmcp|$BOXES_MCP_DIR|g" \
+  ~/.config/systemd/user/boxes-mcp.service
 systemctl --user daemon-reload
 systemctl --user enable --now boxes-mcp
 journalctl --user -fu boxes-mcp
@@ -527,9 +544,9 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Support
 
-- **Issues**: [GitHub Issues](https://github.com/your-org/boxes-mcp/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/your-org/boxes-mcp/discussions)
-- **Documentation**: [Project Wiki](https://github.com/your-org/boxes-mcp/wiki)
+- **Issues**: [GitHub Issues](https://github.com/EF-Code/boxes-mcp/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/EF-Code/boxes-mcp/discussions)
+- **Documentation**: [Project Wiki](https://github.com/EF-Code/boxes-mcp/wiki)
 
 ---
 
